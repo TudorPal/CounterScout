@@ -931,7 +931,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
         {/* Radar workspace: fixed team docks are siblings of the zoom viewport. */}
         <div aria-label="Insights radar workspace" className="flex-1 min-w-0 h-full hud-panel p-2 overflow-hidden flex flex-col items-center">
           <div className="w-full"><ReplayEconomy timeline={timeline} tick={currentRoundObj ? roundAnchor(currentRoundObj) : 0} label="Buy-phase economy" /></div>
-          <div className="flex items-center gap-2 mb-1 w-full">
+          <div className="flex items-center gap-2 flex-wrap mb-1 w-full">
             {/* Mode tabs — round / heatmap / patterns */}
             <div className="flex items-center gap-1">
               {(["round", "heatmap", "patterns"] as const).map((m) => (
@@ -950,9 +950,12 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
               ))}
             </div>
             {radarMode === "round" && currentRoundObj && (
-              <span className="text-[10px] text-scout-muted font-mono ml-auto">
-                Round {currentRound} · {currentRoundObj.winner ?? "tied"} · {Math.round((currentRoundObj.end_tick - currentRoundObj.start_tick) / 64)}s
-              </span>
+              <div aria-label="Round utility summary" className="ml-auto flex items-center gap-3 rounded-lg border border-scout-accent/25 bg-scout-accent/5 px-3 py-1.5 text-xs font-mono tabular-nums">
+                <span className="text-sm font-bold text-white">Round {currentRound}</span>
+                <span className="font-semibold" style={{color: currentRoundObj.winner === "T" ? TEAM_COLOR[2] : currentRoundObj.winner === "CT" ? TEAM_COLOR[3] : "#94a3b8"}}>{currentRoundObj.winner ? `${currentRoundObj.winner} win` : "Tied"}</span>
+                <span className="text-scout-muted" title="Round duration including the buy phase">{Math.round((currentRoundObj.end_tick - currentRoundObj.start_tick) / (timeline.tick_rate || 64))}s</span>
+                <span aria-label="Round utility count" className="text-scout-accent font-semibold">{filteredRoundNades.length} throws</span>
+              </div>
             )}
           </div>
           {radarMode === "round" && <fieldset aria-label="Round utility types" className="flex items-center gap-1 flex-wrap w-full mb-1.5">
@@ -960,8 +963,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
             {[["all", "All utility"], ["smokegrenade", "Smoke"], ["flashbang", "Flash"], ["hegrenade", "HE"], ["molotov", "Fire"], ["decoy", "Decoy"]].map(([type, label]) => <button key={type}
               aria-pressed={roundUtilityType === type} onClick={() => setRoundUtilityType(type)}
               className={`hud-tab text-[10px] py-0.5 px-2 ${roundUtilityType === type ? "hud-tab-active" : "hud-tab-idle"}`}>{label}</button>)}
-            <span aria-label="Round utility count" className="ml-auto text-[10px] text-scout-muted">{filteredRoundNades.length} throws</span>
-            <button type="button" aria-expanded={eventsOpen} aria-controls="insights-round-events" onClick={() => setEventsOpen(v => !v)} className="hud-btn text-[10px] py-0.5 px-2 2xl:hidden">Events</button>
+            <button type="button" aria-expanded={eventsOpen} aria-controls="insights-round-events" onClick={() => setEventsOpen(v => !v)} className="hud-btn text-[10px] py-0.5 px-2 ml-auto 2xl:hidden">Events</button>
           </fieldset>}
           {/* Player dropdown + per-mode controls. */}
           {radarMode !== "round" && (

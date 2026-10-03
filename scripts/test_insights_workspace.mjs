@@ -25,6 +25,9 @@ try {
   await page.goto(`${origin}/replay/${encodeURIComponent(demo)}/insights`);
   const workspace = page.getByLabel('Insights radar workspace', {exact: true});
   await workspace.waitFor({timeout: 120000});
+  assert.equal(await page.locator('aside').getByText(/^Round \d+$/).count(), 0, 'No duplicate round counter in the left sidebar');
+  const summary = page.getByLabel('Round utility summary', {exact: true});
+  await summary.waitFor();
   const events = page.getByLabel('Round events', {exact: true});
   assert.equal(await events.count(), 1);
   assert.equal(await page.getByLabel('Select insights round', {exact: true}).count(), 0);
@@ -35,6 +38,8 @@ try {
   const smokeCount = roundNades(mixedRound).filter(g => g.type === 'smokegrenade').length;
   await types.getByRole('button', {name: 'Smoke', exact: true}).click();
   await page.waitForFunction(count => document.querySelectorAll('[data-utility-type]').length === count, smokeCount);
+  assert.equal(await summary.getByLabel('Round utility count', {exact: true}).innerText(), `${smokeCount} throws`);
+  assert.ok((await summary.innerText()).includes(`Round ${mixedRound.num}`), 'Prominent summary follows the selected round');
   assert.deepEqual(await events.locator('[data-utility-type]').evaluateAll(rows => [...new Set(rows.map(row => row.dataset.utilityType))]), ['smokegrenade']);
   assert.equal(await workspace.locator('[data-round-utility-type]').count(), smokeCount);
   await events.locator('[data-utility-type]').first().click();
