@@ -1,0 +1,410 @@
+/**
+ * LineupCard — HUD-styled card for a single ranked lineup.
+ *
+ * Shows the auto-label, rank badge, technique + click badges, win rate bar,
+ * metrics, top throwers, and two action buttons. Success/error feedback is
+ * shown as a transient button label rather than an overlay so it never
+ * obscures the other button (old behavior: a toast that covered both
+ * buttons).
+ */
+import { useState } from "react";
+import {
+  LineupRanking,
+  ReplayStringResponse,
+  describeLineup,
+  getConsoleString,
+  getReplayString,
+  practiceLineup,
+} from "../api/client";
+
+const GRENADE_ACCENT: Record<string, string> = {
+  smokegrenade: "#cbd5e1",
+  flashbang: "#fde047",
+  hegrenade: "#f87171",
+  molotov: "#fb923c",
+  decoy: "#9ca3af",
+};
+
+const TECHNIQUE_LABEL: Record<string, string> = {
+  stand: "Stand",
+  walk: "Walk",
+  run: "Run",
+  crouch: "Crouch",
+  jump: "Jump",
+  running_jump: "Run + Jump",
+};
+
+const CLICK_LABEL: Record<string, string> = {
+  left: "Left",
+  right: "Right",
+  both: "Left + Right",
+};
+
+interface Props {
+  ranking: LineupRanking;
+  selected?: boolean;
+  // Active player filter from the dashboard. When set, the Replay button
+  // forwards it to /api/replay so the seek jumps to that player's own
+  // throw in this cluster (and spec_player locks to them).
+  activePlayer?: string | null;
+  activeTeam?: string | null;
+}
+
+type ButtonState = "idle" | "loading" | "success" | "error";
+
+export default function LineupCard({
+  ranking,
+  selected = false,
+  activePlayer = null,
+  activeTeam = null,
+}: Props) {
+  const { rank, cluster, impact_score } = ranking;
+  const [copyState, setCopyState] = useState<ButtonState>("idle");
+  const [replayState, setReplayState] = useState<ButtonState>("idle");
+  const [practiceState, setPracticeState] = useState<ButtonState>("idle");
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // Two-step replay flow: after a successful load-string copy we enter
+  // "seek" phase and the same button copies demo_goto on the next click.
+  // Chaining playdemo+demo_goto into one paste races CS2's async loader and
+  // drops the seek; splitting it lets the user wait for the demo to load.
+  const [replayPhase, setReplayPhase] = useState<"load" | "seek">("load");
+  const [replayData, setReplayData] = useState<ReplayStringResponse | null>(
+    null,
+  );
+  const [aiDesc, setAiDesc] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const flashState = (
+    setter: (s: ButtonState) => void,
+    state: ButtonState,
+    ms = 1800,
+  ) => {
+    setter(state);
+    setTimeout(() => setter("idle"), ms);
+  };
+
+  const handleCopy = async () => {
+    setCopyState("loading");
+    setErrorMsg(null);
+    try {
+      const res = await getConsoleString(cluster.cluster_id, cluster.map_name, activeTeam ?? undefined, cluster.scope_side ?? undefined);
+      await navigator.clipboard.writeText(res.console_string);
+      flashState(setCopyState, "success");
+    } catch (e: any) {
+      setErrorMsg(e?.response?.data?.detail ?? "Copy failed");
+      flashState(setCopyState, "error");
+    }
+  };
+
+  const handleReplay = async () => {
+    setErrorMsg(null);
+    if (replayPhase === "seek" && replayData) {
+      try {
+        await navigator.clipboard.writeText(replayData.seek_string);
+        setReplayState("success");
+        setTimeout(() => {
+          setReplayState("idle");
+          setReplayPhase("load");
+          setReplayData(null);
+        }, 1800);
+      } catch {
+        setErrorMsg("Clipboard write failed");
+        flashState(setReplayState, "error");
+      }
+      return;
+    }
+    setReplayState("loading");
+    try {
+      const res = await getReplayString(
+        cluster.cluster_id,
+        cluster.map_name,
+        activePlayer ?? undefined,
+        activeTeam ?? undefined,
+        cluster.scope_side ?? undefined,
+      );
+      await navigator.clipboard.writeText(res.load_string);
+      setReplayData(res);
+      setReplayPhase("seek");
+      setReplayState("success");
+      setTimeout(() => setReplayState("idle"), 1800);
+    } catch (e: any) {
+      setErrorMsg(e?.response?.data?.detail ?? "Replay lookup failed");
+      flashState(setReplayState, "error");
+    }
+  };
+
+  const handlePractice = async () => {
+    setPracticeState("loading");
+    setErrorMsg(null);
+    try {
+      const res = await practiceLineup(cluster.cluster_id, cluster.map_name, activeTeam ?? undefined, cluster.scope_side ?? undefined);
+      if (res.success) {
+        flashState(setPracticeState, "success");
+      } else {
+        setErrorMsg(res.error || "RCON failed");
+        flashState(setPracticeState, "error");
+      }
+    } catch {
+      setErrorMsg("RCON connection failed — is CS2 running?");
+      flashState(setPracticeState, "error");
+    }
+  };
+
+  const handleDescribe = async () => {
+    if (aiDesc || aiLoading) return;
+    setAiLoading(true);
+    try {
+      const res = await describeLineup(cluster.cluster_id, cluster.map_name, activeTeam ?? undefined, cluster.scope_side ?? undefined);
+      setAiDesc(res.description);
+    } catch {
+      setAiDesc("Failed to generate description.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const accent = GRENADE_ACCENT[cluster.grenade_type] ?? "#94a3b8";
+  const winPct = (cluster.round_win_rate * 100).toFixed(1);
+  const winBarWidth = Math.round(cluster.round_win_rate * 100);
+
+  const techniqueText = cluster.primary_technique
+    ? TECHNIQUE_LABEL[cluster.primary_technique] ?? cluster.primary_technique
+    : null;
+  const clickText = cluster.primary_click
+    ? CLICK_LABEL[cluster.primary_click] ?? cluster.primary_click
+    : null;
+
+  const copyLabel =
+    copyState === "loading"
+      ? "Copying…"
+      : copyState === "success"
+      ? "Copied ✓"
+      : copyState === "error"
+      ? "Failed"
+      : "Copy Console";
+
+  const practiceLabel =
+    practiceState === "loading"
+      ? "Sending…"
+      : practiceState === "success"
+      ? "Teleported ✓"
+      : practiceState === "error"
+      ? "RCON error"
+      : "Practice";
+
+  const hasDemoPointer =
+    cluster.demo_file != null && cluster.demo_tick != null;
+  const replayLabel =
+    replayState === "loading"
+      ? "…"
+      : replayState === "error"
+      ? "Failed"
+      : replayState === "success"
+      ? replayPhase === "seek"
+        ? "Load ✓ → Seek"
+        : "Seek ✓"
+      : replayPhase === "seek"
+      ? "Copy Seek"
+      : "Replay";
+
+  return (
+    <div
+      className={`hud-panel p-4 flex flex-col gap-3 transition-all duration-150 group ${
+        selected
+          ? "border-scout-accent shadow-[0_0_28px_rgba(94, 224, 194,0.35)] -translate-y-0.5"
+          : "hover:-translate-y-0.5 hover:shadow-[0_0_20px_rgba(94, 224, 194,0.12)]"
+      }`}
+      style={{ borderTopColor: accent, borderTopWidth: 2 }}
+    >
+      {/* Rank badge */}
+      <div
+        className="absolute -top-3 -left-2 px-2 h-6 min-w-[2rem] rounded-md border border-scout-accent/60 bg-scout-bg flex items-center justify-center text-[11px] font-mono font-bold text-scout-accent shadow-[0_0_12px_rgba(94, 224, 194,0.25)]"
+      >
+        #{rank}
+      </div>
+
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 mt-1">
+        <div className="flex-1 min-w-0">
+          <p className="text-[13px] font-semibold text-white leading-tight truncate">
+            {cluster.label ?? `Cluster ${cluster.cluster_id}`}
+          </p>
+          <p className="text-[10px] text-scout-muted mt-1 uppercase tracking-[0.15em]">
+            {cluster.throw_count} throws · impact{" "}
+            <span className="text-scout-accent font-mono normal-case tracking-normal">
+              {impact_score.toFixed(3)}
+            </span>
+          </p>
+        </div>
+        <span
+          className="text-[10px] font-mono px-2 py-0.5 rounded-md border capitalize shrink-0"
+          style={{ borderColor: accent, color: accent }}
+        >
+          {cluster.grenade_type.replace("grenade", "")}
+        </span>
+      </div>
+
+      {/* Technique / click badges */}
+      {(techniqueText || clickText) && (
+        <div className="flex flex-wrap gap-1.5 -mt-1">
+          {techniqueText && (
+            <span
+              className="text-[10px] font-mono uppercase tracking-[0.1em] px-2 py-0.5 rounded border border-scout-accent/40 bg-scout-accent/10 text-scout-accent"
+              title={`${(cluster.technique_agreement * 100).toFixed(0)}% of throws agree`}
+            >
+              {techniqueText}
+              {cluster.technique_agreement < 1 && (
+                <span className="text-scout-accent/60 ml-1">
+                  {(cluster.technique_agreement * 100).toFixed(0)}%
+                </span>
+              )}
+            </span>
+          )}
+          {clickText && (
+            <span
+              className="text-[10px] font-mono uppercase tracking-[0.1em] px-2 py-0.5 rounded border border-scout-blue/40 bg-scout-blue/10 text-scout-blue"
+              title={`${(cluster.click_agreement * 100).toFixed(0)}% of throws agree`}
+            >
+              {clickText} click
+              {cluster.click_agreement < 1 && (
+                <span className="text-scout-blue/60 ml-1">
+                  {(cluster.click_agreement * 100).toFixed(0)}%
+                </span>
+              )}
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Win rate bar */}
+      <div>
+        <div className="flex justify-between text-[10px] text-scout-muted uppercase tracking-[0.12em] mb-1">
+          <span>Round Win Rate</span>
+          <span className="text-scout-green font-mono tracking-normal normal-case">{winPct}%</span>
+        </div>
+        <div className="h-1 rounded-full bg-scout-border/70 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-scout-green to-scout-accent transition-all duration-500"
+            style={{ width: `${winBarWidth}%` }}
+          />
+        </div>
+      </div>
+
+      {/* Stats grid */}
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[10px]">
+        <span className="text-scout-muted uppercase tracking-[0.1em]">Avg Dmg</span>
+        <span className="font-mono text-scout-red text-right">
+          {cluster.avg_utility_damage.toFixed(1)} HP
+        </span>
+
+        <span className="text-scout-muted uppercase tracking-[0.1em]">Stand</span>
+        <span className="font-mono text-gray-300 text-right">
+          {cluster.throw_centroid_x.toFixed(0)},{cluster.throw_centroid_y.toFixed(0)}
+        </span>
+
+        <span className="text-scout-muted uppercase tracking-[0.1em]">Land</span>
+        <span className="font-mono text-gray-300 text-right">
+          {cluster.land_centroid_x.toFixed(0)},{cluster.land_centroid_y.toFixed(0)}
+        </span>
+
+        <span className="text-scout-muted uppercase tracking-[0.1em]">Angle</span>
+        <span className="font-mono text-gray-300 text-right">
+          P{cluster.avg_pitch.toFixed(0)} Y{cluster.avg_yaw.toFixed(0)}
+        </span>
+      </div>
+
+      {/* Top throwers */}
+      {cluster.top_throwers && cluster.top_throwers.length > 0 && (
+        <div>
+          <p className="text-[9px] text-scout-muted uppercase tracking-[0.15em] mb-1">
+            Thrown by
+          </p>
+          <div className="flex flex-wrap gap-1">
+            {cluster.top_throwers.map((t) => (
+              <span
+                key={t.name}
+                className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-scout-panel/80 border border-scout-border text-gray-300"
+                title={`${t.count} throw${t.count === 1 ? "" : "s"}`}
+              >
+                {t.name}
+                <span className="text-scout-muted"> ×{t.count}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* AI description */}
+      {aiDesc ? (
+        <p className="text-[10px] text-gray-300 leading-relaxed border-l-2 border-scout-accent/40 pl-2 italic">
+          {aiDesc}
+        </p>
+      ) : (
+        <button
+          onClick={(e) => { e.stopPropagation(); handleDescribe(); }}
+          disabled={aiLoading}
+          className="text-[10px] text-scout-muted hover:text-scout-accent transition self-start"
+        >
+          {aiLoading ? "Generating..." : "AI Describe"}
+        </button>
+      )}
+
+      {/* Error message — shown inline so it never overlaps buttons */}
+      {errorMsg && (
+        <p className="text-[10px] text-scout-red border-l-2 border-scout-red/50 pl-2">
+          {errorMsg}
+        </p>
+      )}
+
+      {/* Action buttons — three-up: Copy, Replay, Practice. Each button is
+          text-[10px] with flex-1 min-w-0 so they don't overflow the card at
+          narrow grid widths. */}
+      <div className="flex gap-1.5 mt-auto pt-1" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={handleCopy}
+          disabled={copyState === "loading"}
+          className={`flex-1 min-w-0 text-[10px] ${
+            copyState === "success"
+              ? "hud-btn-primary"
+              : copyState === "error"
+                ? "hud-btn-danger"
+                : "hud-btn"
+          }`}
+        >
+          {copyLabel}
+        </button>
+        <button
+          onClick={handleReplay}
+          disabled={!hasDemoPointer || replayState === "loading"}
+          title={
+            hasDemoPointer
+              ? replayPhase === "seek"
+                ? "Step 2: paste this `demo_goto … 0 1; spec_player <slot>` into CS2 console after the demo has loaded. It parks playback paused ~5s before the throw AND locks the camera to the thrower — spacebar to watch."
+                : "Step 1: copies `playdemo <file>`. Paste into CS2 console, wait for the demo to load, then click this button again to copy the seek + spectate command. Demo file must be in game/csgo/."
+              : "No demo pointer stored — re-run the pipeline for this map."
+          }
+          className={`flex-1 min-w-0 text-[10px] ${
+            !hasDemoPointer
+              ? "hud-btn opacity-40 cursor-not-allowed"
+              : replayState === "error"
+                ? "hud-btn-danger"
+                : replayState === "success" || replayPhase === "seek"
+                  ? "hud-btn-primary"
+                  : "hud-btn"
+          }`}
+        >
+          {replayLabel}
+        </button>
+        <button
+          onClick={handlePractice}
+          disabled={practiceState === "loading"}
+          className={`flex-1 min-w-0 text-[10px] ${
+            practiceState === "error" ? "hud-btn-danger" : "hud-btn-primary"
+          }`}
+        >
+          {practiceLabel}
+        </button>
+      </div>
+    </div>
+  );
+}

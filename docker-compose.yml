@@ -1,0 +1,62 @@
+name: counterscout
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    image: counterscout/backend:latest
+    env_file: .env
+    environment:
+      # container-internal paths — the named volumes below mount here
+      DEMO_DIR: /app/demos
+      DB_PATH: /app/data/lineups.db
+    volumes:
+      - app-data:/app/data                                # SQLite + timeline cache
+      - demos:/app/demos                                  # .dem files + roster sidecars
+      - player-photos:/app/backend/data/player_photos     # HLTV photo cache
+    networks:
+      - internal
+    restart: unless-stopped
+    # reap zombies from rarfile's unrar/7z subprocesses
+    init: true
+    mem_limit: 3g
+    cpus: 3
+    logging: *default-logging
+
+  web:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    image: counterscout/web:latest
+    ports:
+      - "${WEB_PORT:-80}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - internal
+    restart: unless-stopped
+    init: true
+    mem_limit: 256m
+    cpus: 1
+    logging: *default-logging
+
+volumes:
+  app-data:
+    # Preserve existing installations' storage across the product rename.
+    name: ${COUNTERSCOUT_DATA_VOLUME:-cs2-meta-engine_app-data}
+  demos:
+    name: ${COUNTERSCOUT_DEMOS_VOLUME:-cs2-meta-engine_demos}
+  player-photos:
+    name: ${COUNTERSCOUT_PHOTOS_VOLUME:-cs2-meta-engine_player-photos}
+
+networks:
+  internal:
+    driver: bridge

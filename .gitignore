@@ -1,0 +1,92 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# ---- Node / frontend ----
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+.vite/
+coverage/
+*.tsbuildinfo
+frontend/*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- Project data (runtime, not source) ----
+demos/
+data/
+backend/data/lineup_data.db
+backend/data/*.db
+backend/data/*.db-*
+backend/data/*.sqlite*
+backend/data/player_photos/
+data/lineups.db
+data/*.db
+data/*.db-journal
+.cache/
+
+# ---- Testing / temp ----
+.playwright-mcp/
+test-*.png
+skills.md
+
+# ---- Secrets / env ----
+.env
+.env.*
+!.env.example
+!.env.*.example
+.env.local
+.env.*.local
+.mcp.json
+
+# ---- Terraform (state + secrets stay local) ----
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/tf-token.json
+terraform/crash.log
+terraform/crash.*.log
+terraform/*.tfvars
+terraform/*.tfvars.json
+terraform/*.tfplan
+
+# ---- Ansible ----
+ansible/*.retry
+
+# ---- Claude Code metadata ----
+.claude/
+.codex/
+
+# ---- IDEs / OS ----
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ---- Build artifacts ----
+build/
+dist/
+*.spec
+
+# ---- Logs ----
+*.log
+logs/

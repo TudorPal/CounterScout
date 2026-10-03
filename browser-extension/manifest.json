@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "minimum_chrome_version": "120",
+  "name": "CounterScout — FACEIT Bridge",
+  "version": "0.2.2",
+  "description": "Sync FACEIT team matches and import completed demo downloads into your local CounterScout.",
+  "permissions": ["downloads", "storage", "alarms"],
+  "host_permissions": ["https://www.faceit.com/*", "https://api.faceit.com/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "background": {"service_worker": "worker.js", "type": "module"},
+  "action": {"default_popup": "popup.html"},
+  "content_scripts": [
+    {"matches": ["https://www.faceit.com/*"], "js": ["history-observer.js"], "world": "MAIN", "run_at": "document_start"},
+    {"matches": ["https://www.faceit.com/*"], "js": ["faceit-content.js"], "run_at": "document_start"},
+    {"matches": ["http://localhost/*", "http://127.0.0.1/*"], "js": ["app-content.js"], "run_at": "document_idle"}
+  ]
+}
