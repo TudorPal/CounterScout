@@ -741,7 +741,7 @@ body::before {
     z-index: 40;
   }
   .replay-team-panel {
-    width: clamp(220px, calc((100cqw - min(100cqw, 100cqh)) / 2 - 16px), 340px);
+    width: clamp(220px, calc((100cqw - min(100cqw, 100cqh)) / 2 - 16px), 360px);
     pointer-events: auto;
   }
 }
