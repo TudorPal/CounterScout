@@ -495,7 +495,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
   // Mouse-resizable side panel widths.
-  const [leftPaneWidth, setLeftPaneWidth] = useState(260);
+  const [leftPaneWidth, setLeftPaneWidth] = useState(360);
   const [rightPaneWidth, setRightPaneWidth] = useState(280);
   const [playersOpen, setPlayersOpen] = useState(false);
   const resizeRef = useRef<{ side: "left" | "right"; startX: number; startW: number } | null>(null);
@@ -505,7 +505,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
       if (!r) return;
       const dx = e.clientX - r.startX;
       const next = r.side === "left" ? r.startW + dx : r.startW - dx;
-      const clamped = Math.max(180, Math.min(560, next));
+      const clamped = Math.max(r.side === "left" ? 320 : 180, Math.min(560, next));
       if (r.side === "left") setLeftPaneWidth(clamped);
       else setRightPaneWidth(clamped);
     };
@@ -936,7 +936,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
             // — sum winners where the team's current-round side matches:
             const totalWins = scoreAt(timeline, identity)[sideTeam];
             return (
-              <div key={sideTeam} className="hud-panel p-3 flex-1 min-h-0 flex flex-col">
+              <div key={sideTeam} className="hud-panel p-2 shrink-0 flex flex-col">
                 <div className="flex items-center gap-2 pb-2 border-b border-scout-border/30 mb-2">
                   <input
                     type="checkbox"
@@ -950,7 +950,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                   <span className="ml-auto font-mono font-bold text-white text-xl">{totalWins}</span>
                 </div>
                 <div className="text-[10px] font-mono pb-2 text-scout-muted">{displayTeam === 2 ? "T" : "CT"} · cash {money(roundEconomy[displayTeam].known ? roundEconomy[displayTeam].cash : null)} · equip {money(roundEconomy[displayTeam].equipment)}</div>
-                <div className="grid text-xs text-scout-muted uppercase tracking-[0.08em] px-1 pb-1.5"
+                <div className="grid gap-2 text-xs text-scout-muted uppercase tracking-[0.08em] px-1 pb-1.5"
                      style={{ gridTemplateColumns: "20px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)" }}>
                   <span />
                   <span>Player</span>
@@ -965,7 +965,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                     <div
                       key={p.steamid}
                       onClick={() => toggleSid(p.steamid)}
-                      className={`grid items-center gap-2 px-1 py-2 rounded cursor-pointer text-sm transition-colors ${
+                      className={`grid items-center gap-2 px-1 py-1 rounded cursor-pointer text-xs transition-colors ${
                         selected ? "hover:bg-scout-border/15" : "opacity-40 hover:opacity-60"
                       }`}
                       style={{ gridTemplateColumns: "20px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)" }}
