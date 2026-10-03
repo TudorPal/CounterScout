@@ -42,6 +42,29 @@ try {
   await page.getByLabel('Round clock', {exact: true}).waitFor();
   const firstTick = Number(await slider.inputValue());
   const rate = timeline.tick_rate || 64;
+  const fullLoadoutPlayers = timeline.players.filter(p => timeline.positions[p.steamid]?.some(s => s.alive && s.ar > 0 && s.inv?.length === 8 && s.inv.includes('C4 Explosive')));
+  const fullLoadoutPlayer = fullLoadoutPlayers.find(p => p.name === 'DodelBetivu') ?? fullLoadoutPlayers[0];
+  if (fullLoadoutPlayer) {
+    const sample = timeline.positions[fullLoadoutPlayer.steamid].find(s => s.alive && s.ar > 0 && s.inv?.length === 8 && s.inv.includes('C4 Explosive'));
+    await seek(sample.t);
+    const row = page.locator(`[data-player-id="${fullLoadoutPlayer.steamid}"]`);
+    await row.getByAltText('Bomb carrier', {exact: true}).waitFor();
+    const bar = await row.locator('.replay-player-health').boundingBox();
+    const bomb = await row.getByAltText('Bomb carrier', {exact: true}).boundingBox();
+    assert.ok(Math.abs(bar.x + bar.width - bomb.x - bomb.width) < 1, 'Full health ends at the maximum loadout bomb slot');
+    const widths = await page.locator('.replay-player-health').evaluateAll(elements => elements.map(el => el.getBoundingClientRect().width));
+    assert.ok(Math.max(...widths) - Math.min(...widths) < 1, 'Health tracks stay equal across different player cash/name widths');
+    const cash = await page.locator('.replay-player-cash').allTextContents();
+    assert.ok(new Set(cash).size > 1, 'Health sizing checked against real differing cash amounts');
+    const icons = await row.locator('.replay-player-loadout img').evaluateAll(elements => elements.map(el => el.getBoundingClientRect().height));
+    assert.ok(icons.every(height => height >= 16), 'Loadout icons are enlarged');
+    const directory = process.env.COUNTERSCOUT_TEST_SCREENSHOTS;
+    if (directory) {
+      mkdirSync(directory, {recursive: true});
+      await row.locator('xpath=ancestor::section').screenshot({path: join(directory, 'full-loadout.png')});
+    }
+    await seek(firstTick);
+  }
   await page.getByRole('button', {name: 'Forward 15 seconds', exact: true}).click();
   assert.equal(Number(await slider.inputValue()), firstTick + 15 * rate);
   await page.getByRole('button', {name: 'Back 15 seconds', exact: true}).click();
@@ -80,6 +103,7 @@ try {
     for (const b of boxes) {
       assert.ok(b.bottom <= viewport.height && b.y >= 0, 'Entire roster stays in viewport');
       assert.ok(b.scrollHeight <= b.clientHeight, 'No roster scrollbar');
+      assert.ok(b.right - b.x <= 308, 'Roster panels remain narrow in both dock and footer layouts');
       assert.ok(b.right <= radarBox.x || b.x >= radarBox.x + radarBox.width || b.y >= radarBox.y + radarBox.height, 'Unzoomed radar and team panels never overlap');
     }
     const transformBefore = await page.locator('.replay-radar-viewport > div[style*="transform"]').getAttribute('style');

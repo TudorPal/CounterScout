@@ -724,6 +724,13 @@ body::before {
   gap: 0.5rem;
   flex-shrink: 0;
 }
+.replay-team-panel {
+  width: 100%;
+  max-width: 308px;
+}
+.replay-team-panel:last-child {
+  justify-self: end;
+}
 
 /* Use only the empty radar gutters; narrow/tall windows keep rosters below
    the viewport instead of covering the map. Neither layout is zoomable. */
@@ -741,7 +748,7 @@ body::before {
     z-index: 40;
   }
   .replay-team-panel {
-    width: clamp(220px, calc((100cqw - min(100cqw, 100cqh)) / 2 - 16px), 360px);
+    width: clamp(220px, calc((100cqw - min(100cqw, 100cqh)) / 2 - 16px), 308px);
     pointer-events: auto;
   }
 }

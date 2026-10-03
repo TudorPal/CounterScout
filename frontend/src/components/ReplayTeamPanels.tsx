@@ -43,26 +43,31 @@ export default function ReplayTeamPanels({ players, identity, weaponIconPath, hl
                 const healthColor = hp > 50 ? '#4ade80' : hp > 25 ? '#fbbf24' : '#f87171';
                 const inventory = p.inventory.length ? p.inventory : [p.weapon];
                 return (
-                  <div key={p.steamid} data-player-id={p.steamid} className="rounded px-2 py-1 min-w-0" style={{background: `${color}14`, opacity: p.alive ? 1 : 0.4}}>
+                  <div key={p.steamid} data-player-id={p.steamid} className="rounded px-2 py-1.5 min-w-0" style={{background: `${color}14`, opacity: p.alive ? 1 : 0.4}}>
                     <div className="flex items-center gap-1 min-w-0">
                       <span aria-label={p.alive ? `${hp} health` : 'Dead'} className="text-xs font-mono font-bold w-6 text-right shrink-0" style={{color: p.alive ? healthColor : '#9aaabd'}}>{p.alive ? hp : '×'}</span>
-                      <PlayerAvatar name={p.name} size={22} accent={color} hltvId={hltvIds[p.name.trim().toLowerCase()] ?? null} cacheBust={photoCacheVersion || undefined} />
-                      <span className="relative text-xs font-semibold text-white truncate min-w-0 flex-1 pb-0.5" title={p.name}>
-                        {p.name}
-                        {p.alive && <span className="absolute bottom-0 left-0 h-px" style={{width: `${hp}%`, background: healthColor}} />}
-                      </span>
-                      <span className="text-[11px] text-scout-green font-mono shrink-0" title={`Cash · equipment ${money(p.equipment)}`}>{money(p.cash)}</span>
+                      <PlayerAvatar name={p.name} size={24} accent={color} hltvId={hltvIds[p.name.trim().toLowerCase()] ?? null} cacheBust={photoCacheVersion || undefined} />
+                      <span className="text-xs font-semibold text-white truncate min-w-0 flex-1" title={p.name}>{p.name}</span>
+                      <span className="replay-player-cash text-[11px] text-scout-green font-mono shrink-0" title={`Cash · equipment ${money(p.equipment)}`}>{money(p.cash)}</span>
                     </div>
-                    <div className="flex items-center gap-1 h-4 pl-7 overflow-hidden" style={{visibility: p.alive ? 'visible' : 'hidden'}} title={inventory.join(', ')}>
-                      {p.armor > 0 && <span className="flex items-center gap-0.5 shrink-0 text-[10px] font-mono text-scout-muted mr-1">
-                        <img src={p.helmet ? '/icons/helmet.svg' : '/icons/kevlar.svg'} alt={p.helmet ? 'Helmet and kevlar' : 'Kevlar'} className="w-3.5 h-3.5" style={{filter: 'brightness(0) invert(0.85)'}} />{p.armor}
+                    {/* A shared fixed rail fits armour, two weapons, four grenades
+                        and the bomb. Cash/name widths cannot stretch the bar. */}
+                    <div className="ml-7" style={{width: 238, maxWidth: 'calc(100% - 1.75rem)'}}>
+                    <div role="meter" aria-label={`${p.name} health`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={p.alive ? hp : 0} className="replay-player-health ml-7 mt-1 mb-1 h-0.5 rounded bg-white/10 overflow-hidden" style={{visibility: p.alive ? 'visible' : 'hidden'}}>
+                      <div className="h-full rounded" style={{width: `${hp}%`, background: healthColor}} />
+                    </div>
+                    <div className="replay-player-loadout flex flex-wrap items-center gap-1 min-h-[18px]" style={{visibility: p.alive ? 'visible' : 'hidden'}} title={inventory.join(', ')}>
+                      {p.armor > 0 && <span className="flex items-center gap-0.5 w-9 shrink-0 text-[10px] font-mono text-scout-muted">
+                        <img src={p.helmet ? '/icons/helmet.svg' : '/icons/kevlar.svg'} alt={p.helmet ? 'Helmet and kevlar' : 'Kevlar'} className="w-4 h-4" style={{filter: 'brightness(0) invert(0.85)'}} />{p.armor}
                       </span>}
                       {inventory.map((weapon, index) => {
                         const icon = weaponIconPath(weapon);
                         if (!icon || icon === '/icons/knife.svg' || icon === '/icons/c4.svg') return null;
-                        return <img key={`${weapon}-${index}`} src={icon} alt={weapon} title={weapon} className="h-3.5 max-w-10 object-contain shrink-0" style={{filter: 'brightness(0) invert(0.9)', opacity: weapon.toLowerCase() === p.weapon.toLowerCase() ? 1 : 0.5}} />;
+                        const utility = /\/(smokegrenade|flashbang|hegrenade|molotov|incgrenade|decoy)\.svg$/.test(icon);
+                        return <img key={`${weapon}-${index}`} src={icon} alt={weapon} title={weapon} className={`h-[18px] ${utility ? 'w-[18px]' : 'w-[42px]'} object-contain shrink-0`} style={{filter: 'brightness(0) invert(0.9)', opacity: weapon.toLowerCase() === p.weapon.toLowerCase() ? 1 : 0.5}} />;
                       })}
-                      {(p.hasBomb || inventory.some(weapon => weaponIconPath(weapon) === '/icons/c4.svg')) && <img src="/icons/c4.svg" alt="Bomb carrier" title="Bomb carrier" className="w-3.5 h-3.5 shrink-0" />}
+                      {(p.hasBomb || inventory.some(weapon => weaponIconPath(weapon) === '/icons/c4.svg')) && <img src="/icons/c4.svg" alt="Bomb carrier" title="Bomb carrier" className="w-[18px] h-[18px] shrink-0" />}
+                    </div>
                     </div>
                   </div>
                 );
