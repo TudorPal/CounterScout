@@ -65,6 +65,14 @@ try {
     const square = workspace.locator('.insights-radar-viewport > div[style*="transform"]');
     const radar = await square.boundingBox();
     assert.ok(boxes[0].right <= boxes[1].x, 'Player cards never overlap');
+    const statsFit = await filters.locator('[data-player-id]').evaluateAll(rows => rows.every(row => [...row.children].slice(2).every(cell => {
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      const text = range.getBoundingClientRect();
+      const bounds = cell.getBoundingClientRect();
+      return text.x >= bounds.x - 1 && text.right <= bounds.right + 1 && parseFloat(getComputedStyle(cell).fontSize) >= 12;
+    })));
+    assert.ok(statsFit, 'Readable 12px stats fit their columns without overlapping');
     for (const box of boxes) {
       assert.ok(box.y >= 0 && box.bottom <= viewport.height, 'Entire player filter is visible');
       assert.ok(box.scrollHeight <= box.clientHeight, 'No card scrollbar');
