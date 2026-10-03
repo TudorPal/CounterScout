@@ -25,7 +25,7 @@ import PlayerAvatar from "./PlayerAvatar";
 import RoundOverview from "./RoundOverview";
 import ReplayEconomy from "./ReplayEconomy";
 import { matchIdentity, money, roundAnchor, scoreAt, snapshotAt, teamSide } from "../utils/replayState";
-import { roundClock } from "../utils/replayNavigation";
+import { roundClock, seekTick } from "../utils/replayNavigation";
 
 const RADAR_PX = 1024;
 
@@ -1671,6 +1671,19 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
                       <rect x="12" y="2" width="2" height="12" rx="0.5" />
                     </svg>
                   </button>
+
+                  <button
+                    onClick={() => setCurrentTick(tick => seekTick(timeline, tick, -15))}
+                    disabled={currentTick <= 0}
+                    className="hud-btn px-2 py-1.5 text-xs font-mono"
+                    title="Back 15 seconds" aria-label="Back 15 seconds"
+                  >−15s</button>
+                  <button
+                    onClick={() => setCurrentTick(tick => seekTick(timeline, tick, 15))}
+                    disabled={currentTick >= timeline.tick_max}
+                    className="hud-btn px-2 py-1.5 text-xs font-mono"
+                    title="Forward 15 seconds" aria-label="Forward 15 seconds"
+                  >+15s</button>
 
                   <div className="w-px h-5 bg-white/10 mx-1" />
 

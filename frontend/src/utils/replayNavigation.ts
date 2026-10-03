@@ -1,5 +1,11 @@
 import type { MatchTimeline } from "../api/client";
 
+/** Skip by seconds without seeking outside the demo or changing play state. */
+export function seekTick(timeline: MatchTimeline, tick: number, seconds: number) {
+  const rate = timeline.tick_rate > 0 ? timeline.tick_rate : 64;
+  return Math.max(0, Math.min(timeline.tick_max, tick + seconds * rate));
+}
+
 /** Round-relative clock; freeze countdown is separate from live elapsed time. */
 export function roundClock(timeline: MatchTimeline, tick: number) {
   const round = [...timeline.rounds].reverse().find(r => r.start_tick <= tick);

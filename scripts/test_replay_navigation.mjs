@@ -7,7 +7,7 @@ const source = readFileSync(new URL('../frontend/src/utils/replayNavigation.ts',
 const js = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText;
 const mod = {exports: {}};
 new Function('module', 'exports', js)(mod, mod.exports);
-const {roundClock} = mod.exports;
+const {roundClock, seekTick} = mod.exports;
 const timeline = {tick_rate: 64, tick_max: 30000, rounds: [
   {num: 1, start_tick: 6400, freeze_end_tick: 7680, end_tick: 14080},
   {num: 25, start_tick: 20000, freeze_end_tick: 21920, end_tick: 28000},
@@ -22,3 +22,10 @@ assert.deepEqual(roundClock(timeline, 22560), {round: 25, phase: 'Elapsed', time
 assert.equal(roundClock({...timeline, tick_rate: 128}, 8960).time, '0:10');
 assert.equal(roundClock({...timeline, rounds: [{num: 1, start_tick: 6400, freeze_end_tick: null, end_tick: 14080}]}, 7040).time, '0:10');
 console.log('Replay clock: freeze/live phases, round resets, OT, end clamping, legacy data and tick rates passed.');
+assert.equal(seekTick(timeline, 8320, -15), 7360);
+assert.equal(seekTick(timeline, 8320, 15), 9280);
+assert.equal(seekTick(timeline, 100, -15), 0);
+assert.equal(seekTick(timeline, 29999, 15), timeline.tick_max);
+assert.equal(seekTick({...timeline, tick_rate: 128}, 8320, 15), 10240);
+assert.equal(seekTick({...timeline, tick_rate: 0}, 8320, 15), 9280);
+console.log('Replay seek: ±15 seconds, cross-round seeking, endpoint clamping and tick rates passed.');
