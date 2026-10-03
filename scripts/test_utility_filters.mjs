@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+const require = createRequire(new URL('../frontend/package.json', import.meta.url));
+const ts = require('typescript');
+const source = readFileSync(new URL('../frontend/src/utils/utilityFilters.ts', import.meta.url), 'utf8');
+const js = ts.transpileModule(source, {compilerOptions: {module: ts.ModuleKind.CommonJS}}).outputText;
+const mod = {exports: {}};
+new Function('module', 'exports', js)(mod, mod.exports);
+const {utilityCategory, matchesUtilityType} = mod.exports;
+assert.equal(utilityCategory('incgrenade'), 'molotov');
+assert.equal(utilityCategory('incendiary'), 'molotov');
+assert.equal(matchesUtilityType('incgrenade', 'molotov'), true);
+assert.equal(matchesUtilityType('molotov', 'molotov'), true);
+assert.equal(matchesUtilityType('smokegrenade', 'smokegrenade'), true);
+assert.equal(matchesUtilityType('flashbang', 'smokegrenade'), false);
+assert.equal(matchesUtilityType('decoy', 'all'), true);
+console.log('Utility filters: smoke isolation, all types and shared T/CT fire category passed.');

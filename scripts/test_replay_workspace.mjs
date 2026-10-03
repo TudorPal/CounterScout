@@ -133,15 +133,14 @@ try {
   await page.getByText('Test recap retained across workspace tabs.', {exact: true}).waitFor();
   assert.equal(recapCalls, 1, 'Recap survives navigation without another AI request');
   await page.getByRole('link', {name: 'Insights', exact: true}).click();
-  await page.getByRole('button', {name: 'Players', exact: true}).click();
-  const teamPane = page.locator('div[style*="width: 360px"]').first();
+  const teamPane = page.getByLabel('Insights team and player filters', {exact: true});
   await teamPane.waitFor();
-  const cards = await teamPane.locator(':scope > .hud-panel').evaluateAll(elements => elements.map(el => {
+  const cards = await teamPane.locator(':scope > section').evaluateAll(elements => elements.map(el => {
     const b = el.getBoundingClientRect();
-    return {top: b.top, bottom: b.bottom};
+    return {left: b.left, right: b.right};
   }));
   assert.equal(cards.length, 2);
-  assert.ok(cards[0].bottom <= cards[1].top, 'Insights team cards never overlap');
+  assert.ok(cards[0].right <= cards[1].left, 'Insights team cards never overlap');
   const directory = process.env.COUNTERSCOUT_TEST_SCREENSHOTS;
   if (directory) await page.screenshot({path: join(directory, 'insights-1280.png')});
   assert.deepEqual(errors, [], 'No browser runtime errors');

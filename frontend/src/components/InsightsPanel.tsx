@@ -1,10 +1,9 @@
 /**
  * InsightsPanel — FACEIT-style match insights view.
  *
- * Owns: round ribbon (numbered tiles + half scores + outcome glyphs +
- * turning-point flags), scoreboard with checkbox filter + Swing / DMG /
- * K/D/A, static per-round map snapshot, right-side mode-switched panel
- * (Simple: Utility/Kills vertical list; Detailed: full NadeAnalysisPanel).
+ * Owns: round ribbon, fixed team/player filter docks, Round Utility /
+ * Heatmap / Patterns radar views, and a contextual round-event sidebar
+ * (Simple: Utility/Kills; Detailed: full NadeAnalysisPanel).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -21,14 +20,17 @@ import SearchableSelect from "./SearchableSelect";
 import {playerSideAt, focusedRoundMatchesSide, type ReplaySideFilter, type ReplayTeamFilter} from "../utils/replayFilters";
 import RoundOverview from "./RoundOverview";
 import ReplayEconomy from "./ReplayEconomy";
+import InsightsTeamPanels from "./InsightsTeamPanels";
+import { matchesUtilityType, utilityCategory } from "../utils/utilityFilters";
 import type { LiveReplayStatus } from "./MatchReplayViewer";
-import { economyAt, matchIdentity, money, roundAnchor, scoreAt, snapshotAt, teamSide } from "../utils/replayState";
+import { matchIdentity, roundAnchor, scoreAt, snapshotAt, teamSide } from "../utils/replayState";
 
 const GRENADE_COLOR: Record<string, string> = {
   smokegrenade: "#cbd5e1",
   flashbang: "#fde047",
   hegrenade: "#f87171",
   molotov: "#fb923c",
+  incgrenade: "#fb923c",
   decoy: "#9ca3af",
 };
 
@@ -151,7 +153,7 @@ function tickToRoundTime(startTick: number, tick: number): string {
   return `${m}:${s.toString().padStart(2, "0")}`;
 }
 
-interface PlayerRoundStats {
+export interface PlayerRoundStats {
   steamid: string;
   name: string;
   team: number;
@@ -487,6 +489,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   // ── Mode toggle ──
   const [rightMode, setRightMode] = useState<"simple" | "detailed">("simple");
   const [simpleTab, setSimpleTab] = useState<"utility" | "kills">("utility");
+  const [eventsOpen, setEventsOpen] = useState(false);
   // Isolate a single nade on the map when its row is clicked; clicking again clears.
   const [pinnedNadeGi, setPinnedNadeGi] = useState<number | null>(null);
   // Radar zoom + pan (matches the live replay viewer's behaviour).
@@ -494,20 +497,16 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   const [mapPan, setMapPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
-  // Mouse-resizable side panel widths.
-  const [leftPaneWidth, setLeftPaneWidth] = useState(360);
+  // Only the round-event panel resizes; team cards now dock in the radar.
   const [rightPaneWidth, setRightPaneWidth] = useState(280);
-  const [playersOpen, setPlayersOpen] = useState(false);
-  const resizeRef = useRef<{ side: "left" | "right"; startX: number; startW: number } | null>(null);
+  const resizeRef = useRef<{ startX: number; startW: number } | null>(null);
   useEffect(() => {
     const onMove = (e: MouseEvent) => {
       const r = resizeRef.current;
       if (!r) return;
       const dx = e.clientX - r.startX;
-      const next = r.side === "left" ? r.startW + dx : r.startW - dx;
-      const clamped = Math.max(r.side === "left" ? 320 : 180, Math.min(560, next));
-      if (r.side === "left") setLeftPaneWidth(clamped);
-      else setRightPaneWidth(clamped);
+      const next = r.startW - dx;
+      setRightPaneWidth(Math.max(260, Math.min(560, next)));
     };
     const onUp = () => { resizeRef.current = null; document.body.style.cursor = ""; };
     window.addEventListener("mousemove", onMove);
@@ -517,11 +516,10 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
       window.removeEventListener("mouseup", onUp);
     };
   }, []);
-  const startResize = (side: "left" | "right") => (e: React.MouseEvent) => {
+  const startResize = (e: React.MouseEvent) => {
     resizeRef.current = {
-      side,
       startX: e.clientX,
-      startW: side === "left" ? leftPaneWidth : rightPaneWidth,
+      startW: rightPaneWidth,
     };
     document.body.style.cursor = "col-resize";
     e.preventDefault();
@@ -531,6 +529,10 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   //             patterns = empty radar + per-player movement trails per round
   //                        so repeated routes/throws stand out.
   const [radarMode, setRadarMode] = useState<"round" | "heatmap" | "patterns">("round");
+  const [roundUtilityType, setRoundUtilityType] = useState("all");
+  const roundTypeFilter = useMemo(() => roundUtilityType === "all" ? undefined : new Set(
+    roundUtilityType === "molotov" ? ["molotov", "incgrenade", "incendiary"] : [roundUtilityType],
+  ), [roundUtilityType]);
   // Sub-filter for the radar modes — restricts heatmap/patterns to one player
   // when set. `null` = use the scoreboard's selectedSids set instead.
   const [radarPlayerFocus, setRadarPlayerFocus] = useState<string | null>(null);
@@ -602,6 +604,13 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   const hideTipFor = (key: string) => {
     setHoverTip((prev) => (prev && prev.key === key ? null : prev));
   };
+  useEffect(() => {
+    setPinnedNadeGi(null);
+    setHoverTip(null);
+  }, [currentRound, roundUtilityType, radarMode, selectedSids]);
+  useEffect(() => {
+    if (radarMode !== "patterns") setPatternPlaying(false);
+  }, [radarMode]);
 
 
 
@@ -636,6 +645,8 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
         return t >= currentRoundObj.start_tick && t <= currentRoundObj.end_tick;
       });
   }, [timeline, currentRoundObj]);
+
+  const filteredRoundNades = useMemo(() => roundNades.filter(({g}) => matchesUtilityType(g.type, roundUtilityType)), [roundNades, roundUtilityType]);
 
   // Per-grenade damage from player_hurt events. Match on:
   //   - attacker == thrower
@@ -697,7 +708,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
     const out: { x: number; y: number; type: string }[] = [];
     for (const g of timeline.grenades) {
       if (!radarFilterSids.has(g.thrower)) continue;
-      if (!heatmapTypeFilter.has(g.type)) continue;
+      if (!heatmapTypeFilter.has(utilityCategory(g.type))) continue;
       const throwTick = g.points[0]?.[0];
       if (throwTick == null || (radarSideFocus !== "all" && playerSideAt(timeline, identity, g.thrower, throwTick) !== radarSideFocus)) continue;
       const last = g.points[g.points.length - 1];
@@ -802,7 +813,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
           const g = timeline.grenades[gi];
           if (g.thrower !== p.steamid) continue;
           if (!g.points.length) continue;
-          if (!heatmapTypeFilter.has(g.type)) continue;
+          if (!heatmapTypeFilter.has(utilityCategory(g.type))) continue;
           const t0 = g.points[0][0];
           const tLand = g.points[g.points.length - 1][0];
           if (t0 < r.start_tick || t0 > r.end_tick) continue;
@@ -884,8 +895,6 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
     return byTeam;
   }, [playerTotals]);
 
-  const currentTeamForTeam = (team: number) => teamSide(timeline, identity, team, currentRoundObj ? roundAnchor(currentRoundObj) : 0);
-  const roundEconomy = useMemo(() => economyAt(timeline, currentRoundObj ? roundAnchor(currentRoundObj) : 0), [timeline, currentRoundObj]);
   useEffect(() => {
     if (!onRoundStatus || !currentRoundObj) return;
     const wins = scoreAt(timeline, identity, currentRoundObj.end_tick);
@@ -918,96 +927,9 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
       )}
 
       <div className="flex-1 min-h-0 flex overflow-hidden">
-        {/* ═══ Left scoreboard — user-resizable via the splitter to its right. ═══ */}
-        <div
-          className={`${playersOpen ? "flex" : "hidden 2xl:flex"} shrink-0 overflow-y-auto space-y-2 flex-col`}
-          style={{ width: leftPaneWidth, scrollbarWidth: "thin" }}
-        >
-          {[2, 3]
-            .slice()
-            .sort((a, b) => currentTeamForTeam(a) - currentTeamForTeam(b))
-            .map((sideTeam) => {
-            const sidePlayers = sortedTeams[sideTeam] ?? [];
-            if (!sidePlayers.length) return null;
-            const displayTeam = currentTeamForTeam(sideTeam);
-            const teamColor = TEAM_COLOR[displayTeam] ?? "#94a3b8";
-            const allSelected = sidePlayers.every((p) => selectedSids.has(p.steamid));
-            // Compute total wins for this side-team (stable team identity)
-            // — sum winners where the team's current-round side matches:
-            const totalWins = scoreAt(timeline, identity)[sideTeam];
-            return (
-              <div key={sideTeam} className="hud-panel p-2 shrink-0 flex flex-col">
-                <div className="flex items-center gap-2 pb-2 border-b border-scout-border/30 mb-2">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    onChange={() => toggleTeam(sideTeam)}
-                    className="accent-scout-accent w-4 h-4"
-                  />
-                  <span className="text-sm font-bold uppercase tracking-[0.1em]" style={{ color: teamColor }}>
-                    {teamNames[sideTeam]}
-                  </span>
-                  <span className="ml-auto font-mono font-bold text-white text-xl">{totalWins}</span>
-                </div>
-                <div className="text-[10px] font-mono pb-2 text-scout-muted">{displayTeam === 2 ? "T" : "CT"} · cash {money(roundEconomy[displayTeam].known ? roundEconomy[displayTeam].cash : null)} · equip {money(roundEconomy[displayTeam].equipment)}</div>
-                <div className="grid gap-2 text-xs text-scout-muted uppercase tracking-[0.08em] px-1 pb-1.5"
-                     style={{ gridTemplateColumns: "20px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)" }}>
-                  <span />
-                  <span>Player</span>
-                  <span className="text-right">Swing</span>
-                  <span className="text-right">DMG</span>
-                  <span className="text-right">K/D/A</span>
-                </div>
-                {sidePlayers.map((p) => {
-                  const swingColor = p.swingPct > 0 ? "#4ade80" : p.swingPct < 0 ? "#f87171" : "#94a3b8";
-                  const selected = selectedSids.has(p.steamid);
-                  return (
-                    <div
-                      key={p.steamid}
-                      onClick={() => toggleSid(p.steamid)}
-                      className={`grid items-center gap-2 px-1 py-1 rounded cursor-pointer text-xs transition-colors ${
-                        selected ? "hover:bg-scout-border/15" : "opacity-40 hover:opacity-60"
-                      }`}
-                      style={{ gridTemplateColumns: "20px minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr)" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selected}
-                        onChange={(e) => { e.stopPropagation(); toggleSid(p.steamid); }}
-                        onClick={(e) => e.stopPropagation()}
-                        className="accent-scout-accent w-4 h-4"
-                      />
-                      <span className="min-w-0"><span className="block text-white truncate font-semibold">{p.name}</span><span className="block text-[10px] text-scout-muted font-mono" title="Cash remaining after the buy phase">{money(snapshotAt(timeline.positions[p.steamid], currentRoundObj ? roundAnchor(currentRoundObj) : 0)?.cash)}</span></span>
-                      <span className="text-right font-mono font-bold" style={{ color: swingColor }}>
-                        {p.swingPct >= 0 ? "+" : ""}{p.swingPct.toFixed(1)}%
-                      </span>
-                      <span className="text-right font-mono text-gray-300">
-                        {p.hasRealAggregates ? p.dmg : "—"}
-                      </span>
-                      <span className="text-right font-mono text-gray-300">
-                        {p.kills}/{p.deaths}/{p.assists}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
 
-        {/* Splitter — drag to resize the scoreboard. */}
-        <div
-          onMouseDown={startResize("left")}
-          className={`${playersOpen ? "block" : "hidden 2xl:block"} w-2 shrink-0 cursor-col-resize hover:bg-scout-accent/40 transition-colors rounded`}
-          title="Drag to resize"
-        />
-
-        {/* ═══ Center: round map ═══
-            Now flex-grows into the freed horizontal space (scoreboard is
-            fixed-width). Container is wider than tall on most monitors;
-            the SVG inside uses preserveAspectRatio="xMidYMid meet" so the
-            radar stays square and centers within. */}
-        <div className="flex-1 min-w-0 h-full hud-panel p-2 overflow-hidden flex flex-col items-center">
+        {/* Radar workspace: fixed team docks are siblings of the zoom viewport. */}
+        <div aria-label="Insights radar workspace" className="flex-1 min-w-0 h-full hud-panel p-2 overflow-hidden flex flex-col items-center">
           <div className="w-full"><ReplayEconomy timeline={timeline} tick={currentRoundObj ? roundAnchor(currentRoundObj) : 0} label="Buy-phase economy" /></div>
           <div className="flex items-center gap-2 mb-1 w-full">
             {/* Mode tabs — round / heatmap / patterns */}
@@ -1016,26 +938,31 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                 <button
                   key={m}
                   onClick={() => setRadarMode(m)}
+                  aria-pressed={radarMode === m}
                   className={`text-[10px] uppercase tracking-[0.12em] px-2 py-0.5 rounded font-mono transition-all ${
                     radarMode === m
                       ? "bg-scout-accent/20 text-scout-accent border border-scout-accent/40"
                       : "text-scout-muted hover:text-white border border-transparent"
                   }`}
                 >
-                  {m === "round" ? `Round ${currentRound}` : m}
+                  {m === "round" ? "Round Utility" : m === "heatmap" ? "Heatmap" : "Patterns"}
                 </button>
               ))}
             </div>
-            <button onClick={() => setPlayersOpen(v => !v)} aria-pressed={playersOpen} className="hud-btn text-[10px] py-0.5 px-2 2xl:hidden">Players</button>
-            {radarMode === "round" && <select aria-label="Select insights round" value={currentRound} onChange={e => setCurrentRound(Number(e.target.value))} className="bg-scout-bg border border-scout-border rounded text-xs px-1 py-0.5">
-              {timeline.rounds.map(r => <option key={r.num} value={r.num}>R{r.num}</option>)}
-            </select>}
             {radarMode === "round" && currentRoundObj && (
               <span className="text-[10px] text-scout-muted font-mono ml-auto">
-                {currentRoundObj.winner ?? "tied"} · {Math.round((currentRoundObj.end_tick - currentRoundObj.start_tick) / 64)}s
+                Round {currentRound} · {currentRoundObj.winner ?? "tied"} · {Math.round((currentRoundObj.end_tick - currentRoundObj.start_tick) / 64)}s
               </span>
             )}
           </div>
+          {radarMode === "round" && <fieldset aria-label="Round utility types" className="flex items-center gap-1 flex-wrap w-full mb-1.5">
+            <legend className="sr-only">Round utility types</legend>
+            {[["all", "All utility"], ["smokegrenade", "Smoke"], ["flashbang", "Flash"], ["hegrenade", "HE"], ["molotov", "Fire"], ["decoy", "Decoy"]].map(([type, label]) => <button key={type}
+              aria-pressed={roundUtilityType === type} onClick={() => setRoundUtilityType(type)}
+              className={`hud-tab text-[10px] py-0.5 px-2 ${roundUtilityType === type ? "hud-tab-active" : "hud-tab-idle"}`}>{label}</button>)}
+            <span aria-label="Round utility count" className="ml-auto text-[10px] text-scout-muted">{filteredRoundNades.length} throws</span>
+            <button type="button" aria-expanded={eventsOpen} aria-controls="insights-round-events" onClick={() => setEventsOpen(v => !v)} className="hud-btn text-[10px] py-0.5 px-2 2xl:hidden">Events</button>
+          </fieldset>}
           {/* Player dropdown + per-mode controls. */}
           {radarMode !== "round" && (
             <div className="flex items-center gap-2 flex-wrap mb-1.5 w-full">
@@ -1079,6 +1006,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                   return (
                     <button
                       key={t}
+                      aria-pressed={active}
                       onClick={() => setHeatmapTypeFilter((prev) => {
                         const next = new Set(prev);
                         if (next.has(t)) next.delete(t); else next.add(t);
@@ -1150,8 +1078,9 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
               </span>
             </div>
           )}
+          <div className="replay-stage insights-stage w-full">
           <div
-            className="flex-1 min-h-0 w-full relative flex items-center justify-center"
+            className="replay-radar-viewport insights-radar-viewport flex-1 min-h-0 w-full relative flex items-center justify-center"
             ref={radarHostRef}
             style={{ containerType: "size", overflow: "hidden", cursor: isDragging ? "grabbing" : mapScale > 1 ? "grab" : "default" }}
             onMouseDown={(e) => {
@@ -1407,7 +1336,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                 })}
 
                 {/* ── ROUND mode (default): per-round overlays ── */}
-                {radarMode === "round" && roundNades
+                {radarMode === "round" && filteredRoundNades
                   .filter(({ g, gi }) => selectedSids.has(g.thrower) && (pinnedNadeGi === null || pinnedNadeGi === gi))
                   .map(({ g, gi }) => {
                     if (!g.points.length) return null;
@@ -1691,7 +1620,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                     });
 
                     return (
-                      <g key={gi}>
+                      <g key={gi} data-round-utility-type={g.type} data-grenade-index={gi}>
                         <path d={d} stroke={color} strokeWidth={1.5} fill="none" strokeDasharray="4 3" opacity={0.7} />
                         {radiusCircle}
                         {throwerArrow}
@@ -1711,18 +1640,21 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
               <div className="w-full h-full flex items-center justify-center text-scout-muted">Loading radar…</div>
             )}
           </div>
+          <InsightsTeamPanels timeline={timeline} identity={identity} round={currentRoundObj} teams={sortedTeams} selected={selectedSids} onTogglePlayer={toggleSid} onToggleTeam={toggleTeam} />
+          </div>{/* /insights-stage */}
         </div>
 
         {/* ═══ Right panel — narrower, fills vertical length ═══ */}
         {/* Splitter — drag to resize the right panel. */}
+        {radarMode === "round" && <>
         <div
-          onMouseDown={startResize("right")}
-          className="w-2 shrink-0 cursor-col-resize hover:bg-scout-accent/40 transition-colors rounded"
+          onMouseDown={startResize}
+          className={`${eventsOpen ? "block" : "hidden 2xl:block"} w-2 shrink-0 cursor-col-resize hover:bg-scout-accent/40 transition-colors rounded`}
           title="Drag to resize"
         />
 
-        <div
-          className="shrink-0 flex flex-col gap-2 overflow-hidden"
+        <div id="insights-round-events" aria-label="Round events"
+          className={`${eventsOpen ? "flex" : "hidden 2xl:flex"} shrink-0 flex-col gap-2 overflow-hidden`}
           style={{ width: rightPaneWidth }}
         >
           <div className="hud-panel p-2 flex items-center gap-2 shrink-0">
@@ -1758,9 +1690,9 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
               </div>
               <div className="flex-1 min-h-0 hud-panel p-1 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
                 {simpleTab === "utility" ? (
-                  roundNades.length === 0 ? (
-                    <p className="text-sm text-scout-muted p-3">No utility thrown this round.</p>
-                  ) : roundNades
+                  filteredRoundNades.length === 0 ? (
+                    <p className="text-sm text-scout-muted p-3">{roundNades.length === 0 ? "No utility thrown this round." : "No throws match this utility filter."}</p>
+                  ) : filteredRoundNades
                     .slice()
                     .sort((a, b) => (a.g.points[0]?.[0] ?? 0) - (b.g.points[0]?.[0] ?? 0))
                     .map(({ g, gi }) => {
@@ -1821,19 +1753,21 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                       return (
                         <button
                           key={gi}
+                          data-utility-type={g.type}
+                          data-grenade-index={gi}
                           type="button"
                           onClick={() => setPinnedNadeGi(isPinned ? null : gi)}
-                          className={`flex items-center gap-3 px-3 py-2.5 rounded w-full text-left text-sm transition-colors ${
+                          className={`flex items-center gap-2 px-2 py-2 rounded w-full text-left text-xs transition-colors ${
                             isPinned ? "bg-scout-accent/15 ring-1 ring-scout-accent/40" : "hover:bg-scout-border/15"
                           }`}
                           style={{ opacity: selected ? 1 : 0.3 }}
                           title={dmgBreakdown ? `Damage: ${dmgBreakdown}` : (isPinned ? "Click to un-pin" : "Click to isolate this nade on the map")}
                         >
-                          <img src={iconSrc} alt="" className="w-6 h-6 shrink-0"
+                          <img src={iconSrc} alt="" className="w-5 h-5 shrink-0"
                                style={{ filter: `drop-shadow(0 0 2px ${color})` }} />
                           <span className="text-gray-200 truncate flex-1 font-medium">{throwerName}</span>
-                          <span className="font-mono text-scout-muted shrink-0">{timeLabel}</span>
-                          <span className="font-mono shrink-0 min-w-[90px] text-right font-semibold" style={{ color }}>
+                          <span className="font-mono text-[10px] text-scout-muted shrink-0">{timeLabel}</span>
+                          <span className="font-mono text-[10px] shrink-0 min-w-[68px] text-right font-semibold" style={{ color }}>
                             {effectLabel}
                           </span>
                         </button>
@@ -1900,12 +1834,14 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                   if (r) setCurrentRound(r.num);
                 }}
                 selectedSids={selectedSids}
+                nadeTypeFilter={roundTypeFilter}
                 pinnedNadeGi={pinnedNadeGi}
                 onPinNade={setPinnedNadeGi}
               />
             </div>
           )}
         </div>
+        </>}
       </div>
     </div>
   );
