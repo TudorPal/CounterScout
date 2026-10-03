@@ -20,10 +20,10 @@ import {
   TimelinePosition,
   warmPlayerPhotosStatus,
 } from "../api/client";
-import PlayerAvatar from "./PlayerAvatar";
+import ReplayTeamPanels from "./ReplayTeamPanels";
 import RoundOverview from "./RoundOverview";
 import ReplayEconomy from "./ReplayEconomy";
-import { matchIdentity, money, roundAnchor, scoreAt, snapshotAt, teamSide } from "../utils/replayState";
+import { matchIdentity, roundAnchor, scoreAt, snapshotAt, teamSide } from "../utils/replayState";
 import { roundClock, seekTick } from "../utils/replayNavigation";
 
 const RADAR_PX = 1024;
@@ -45,11 +45,6 @@ const GRENADE_COLOR: Record<string, string> = {
 const TEAM_COLOR: Record<number, string> = {
   2: "#DCBF6E", // T — gold/yellow (CS2 accurate)
   3: "#5B9BD5", // CT — blue (CS2 accurate)
-};
-
-const TEAM_BG: Record<number, string> = {
-  2: "rgba(220, 191, 110, 0.15)",
-  3: "rgba(91, 155, 213, 0.15)",
 };
 
 // ─── Grenade SVG icons from counter-strike-icons (Juknum) ────────────────
@@ -231,30 +226,6 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0, panX: 0, panY: 0 });
 
-  // Mouse-resizable right sidebar.
-  const [sidebarWidth, setSidebarWidth] = useState(320);
-  const sidebarResizeRef = useRef<{ startX: number; startW: number } | null>(null);
-  useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      const r = sidebarResizeRef.current;
-      if (!r) return;
-      const next = r.startW - (e.clientX - r.startX);
-      setSidebarWidth(Math.max(220, Math.min(640, next)));
-    };
-    const onUp = () => { sidebarResizeRef.current = null; document.body.style.cursor = ""; };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
-    return () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-  }, []);
-  const startSidebarResize = (e: React.MouseEvent) => {
-    sidebarResizeRef.current = { startX: e.clientX, startW: sidebarWidth };
-    document.body.style.cursor = "col-resize";
-    e.preventDefault();
-  };
-
   // ── Timestamped notes (localStorage) ──
   interface NoteEntry {
     id: string;
@@ -409,13 +380,10 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
     return m;
   }, [timeline]);
 
-  // Team names: prefer roster data from HLTV, fall back to "T" / "CT".
-  // team_num 2 = T-side, 3 = CT-side (always, swaps at half in the per-tick data).
-  // We label by current side, not by org name, so sides are always clear.
-  // The org names go in the header where we know first-half mapping.
+  // Stable organisation identity is shared by the header and team docks;
+  // per-tick T/CT remains separate so side swaps cannot reorder the rosters.
   const identity = useMemo(() => matchIdentity(timeline, matchInfo), [timeline, matchInfo]);
 
-  // Dynamic team names: always shows which org is on which side RIGHT NOW.
   // Lowercased-name → HLTV player id, sourced from the roster sidecar via
   // matchInfo. Drives the bodyshot images in the scoreboard. Empty when the
   // roster predates HLTV-id capture; PlayerAvatar just falls back to
@@ -430,13 +398,6 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
     }
     return out;
   }, [matchInfo]);
-
-  // Since team_num 2 = T and 3 = CT, and playerStates already uses per-tick tn,
-  // we need to figure out which org is currently T vs CT.
-  const teamNames = useMemo<Record<number, string>>(() => {
-    const side = teamSide(timeline, identity, 2, currentTick);
-    return {[side]:identity.labels[2], [side === 2 ? 3 : 2]:identity.labels[3]};
-  }, [timeline, identity, currentTick]);
 
 
 
@@ -720,7 +681,7 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
         if (round) setCurrentTick(roundAnchor(round));
       }} />
 
-      {/* ═══ Main area: map | sidebar ═══ */}
+      {/* ═══ Main area: radar workspace with fixed team docks ═══ */}
       <div className="flex-1 min-h-0 flex px-2 overflow-hidden">
         {/* ── Map + overlays ── */}
         <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-1">
@@ -763,8 +724,9 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
               </button>
             )}
           </div>
+          <div className="replay-stage">
           <div
-            className="relative flex-1 min-h-0 w-full flex items-center justify-center"
+            className="replay-radar-viewport relative flex-1 min-h-0 w-full flex items-center justify-center"
             style={{ containerType: "size", overflow: "hidden", cursor: isDragging ? "grabbing" : mapScale > 1 ? "grab" : "default" }}
             onMouseDown={(e) => {
               if (mapScale <= 1 || e.button !== 0) return;
@@ -1561,6 +1523,8 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
               </div>
             )}
           </div>{/* /canvas */}
+          <ReplayTeamPanels players={playerStates} identity={identity} weaponIconPath={weaponIconPath} hltvIds={hltvIdByName} photoCacheVersion={photoCacheVersion} />
+          </div>{/* /replay-stage — roster docks are outside pan/zoom handlers */}
 
           {/* Controls */}
           {(() => {
@@ -1752,130 +1716,6 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
         </div>{/* /hud-panel */}
         </div>{/* /map area wrapper */}
 
-        {/* Splitter — drag to resize the sidebar. */}
-        <div
-          onMouseDown={startSidebarResize}
-          className="w-2 shrink-0 cursor-col-resize hover:bg-scout-accent/40 transition-colors rounded"
-          title="Drag to resize"
-        />
-
-        {/* ── Sidebar (right) ── */}
-        <div
-          className="shrink-0 flex flex-col gap-2 overflow-y-auto"
-          style={{ width: sidebarWidth, scrollbarWidth: "thin" }}
-        >
-          {/* Scoreboard / player list — CS2-style with full loadout */}
-          <div className="hud-panel p-2">
-            {[2, 3].map((team) => {
-              const teamPlayers = playerStates
-                .filter((p) => p.team === team)
-                .sort((a, b) => a.name.localeCompare(b.name));
-              if (teamPlayers.length === 0) return null;
-              return (
-                <div key={team} className="mb-3 last:mb-0">
-                  <div className="flex items-center gap-2 mb-1.5 px-1">
-                    <span className="w-3 h-3 rounded-full" style={{ background: TEAM_COLOR[team] }} />
-                    <span className="text-sm uppercase tracking-wider font-bold" style={{ color: TEAM_COLOR[team] }}>
-                      {teamNames[team]}
-                    </span>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded ml-auto"
-                      style={{ background: TEAM_COLOR[team], color: "#000" }}>
-                      {team === 2 ? "T" : "CT"}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-scout-muted font-mono px-1 mb-2">Cash {money(teamPlayers.some(p => p.cash != null) ? teamPlayers.reduce((sum,p) => sum + (p.cash ?? 0), 0) : null)} · equip {money(teamPlayers.reduce((sum,p) => sum + (p.equipment ?? 0), 0))}</p>
-                  <div className="flex flex-col gap-1">
-                    {teamPlayers.map((p) => {
-                      const hpFrac = Math.max(0, Math.min(1, p.hp / 100));
-                      const hpColor = hpFrac > 0.5 ? "#4ade80" : hpFrac > 0.25 ? "#fbbf24" : "#f87171";
-                      const wpnIcon = weaponIconPath(p.weapon);
-                      return (
-                        <div key={p.steamid}
-                          className="rounded-md overflow-hidden border border-transparent"
-                          style={{
-                            opacity: p.alive ? 1 : 0.3,
-                            background: TEAM_BG[p.team] ?? "transparent",
-                            borderColor: p.alive ? `${TEAM_COLOR[p.team]}22` : "transparent",
-                          }}
-                        >
-                          {/* Top row: HP number + Avatar + Name + Armor + Bomb */}
-                          <div className="flex items-center gap-2 px-2.5 py-1">
-                            {/* HP number */}
-                            <span className="text-sm font-bold font-mono w-7 text-right shrink-0" style={{ color: p.alive ? hpColor : "#666" }}>
-                              {p.alive ? p.hp : "☠"}
-                            </span>
-                            {/* HLTV bodyshot (falls back to initials when
-                                the player isn't in a scraped roster). */}
-                            <PlayerAvatar
-                              name={p.name}
-                              hltvId={hltvIdByName[p.name.trim().toLowerCase()] ?? null}
-                              size={28}
-                              accent={TEAM_COLOR[p.team]}
-                              cacheBust={photoCacheVersion || undefined}
-                            />
-                            {/* HP bar (thin, behind name area) */}
-                            <div className="flex-1 min-w-0 flex flex-col gap-0.5">
-                              <span className="text-sm text-white truncate font-semibold">{p.name}</span>
-                              <span className="text-[10px] text-scout-green font-mono" title={`Cash remaining · equipment ${money(p.equipment)}`}>{money(p.cash)}</span>
-                              <div className="w-full h-[3px] rounded-full bg-black/40 overflow-hidden" style={{ visibility: p.alive ? "visible" : "hidden" }}>
-                                <div className="h-full rounded-full" style={{
-                                  width: `${hpFrac * 100}%`,
-                                  background: hpColor,
-                                  transition: "width 0.15s ease",
-                                }} />
-                              </div>
-                            </div>
-                            {/* Armor indicator */}
-                            {p.alive && p.armor > 0 && (
-                              <div className="flex items-center gap-1 shrink-0 rounded px-1 py-0.5" style={{ background: "rgba(255,255,255,0.06)" }}>
-                                <img
-                                  src={p.helmet ? "/icons/helmet.svg" : "/icons/kevlar.svg"}
-                                  alt={p.helmet ? "Helmet+Kevlar" : "Kevlar"}
-                                  className="w-5 h-5"
-                                  style={{ filter: "brightness(0) invert(0.85)" }}
-                                />
-                                <span className="text-xs text-gray-300 font-mono">{p.armor}</span>
-                              </div>
-                            )}
-                            {/* Bomb carrier */}
-                            {p.hasBomb && p.alive && (
-                              <img src="/icons/c4.svg" alt="C4" className="w-5 h-5 shrink-0"
-                                style={{ filter: "brightness(0) saturate(100%) invert(36%) sepia(93%) saturate(7471%) hue-rotate(355deg) brightness(101%) contrast(107%)" }}
-                              />
-                            )}
-                          </div>
-                          {/* Bottom row: Full inventory — always rendered with min-height to prevent layout shift */}
-                          <div className="flex flex-wrap items-center gap-2 px-2.5 pb-1.5 pt-0"
-                            style={{ marginLeft: "calc(1.75rem + 0.5rem)", minHeight: 22, visibility: p.alive ? "visible" : "hidden" }}
-                          >
-                            {(p.inventory ?? []).filter((invWpn) => invWpn && invWpn !== "nan" && invWpn !== "" && !invWpn.toLowerCase().includes("knife")).map((invWpn, idx) => {
-                              const invIcon = weaponIconPath(invWpn);
-                              const isActive = p.weapon && invWpn.toLowerCase() === p.weapon.toLowerCase();
-                              return invIcon ? (
-                                <img
-                                  key={idx}
-                                  src={invIcon}
-                                  alt={invWpn}
-                                  className={`h-4 max-w-[60px] object-contain shrink-0 ${isActive ? "opacity-100" : "opacity-50"}`}
-                                  style={{ filter: "brightness(0) invert(0.9)" }}
-                                  onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-                                  title={invWpn}
-                                />
-                              ) : (
-                                <span key={idx} className={`text-[10px] font-mono truncate ${isActive ? "text-gray-200" : "text-gray-500"}`}>{invWpn}</span>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-        </div>{/* /sidebar */}
       </div>{/* /main flex area */}
 
 

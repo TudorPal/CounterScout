@@ -709,6 +709,43 @@ body::before {
 }
 .scroll-cue { animation: scrollCue 2.4s ease-in-out infinite; }
 
+.replay-stage {
+  container: replay-stage / size;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  flex: 1;
+  min-height: 0;
+}
+.replay-team-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+/* Use only the empty radar gutters; narrow/tall windows keep rosters below
+   the viewport instead of covering the map. Neither layout is zoomable. */
+@container replay-stage (min-width: 1000px) and (min-aspect-ratio: 19/10) {
+  .replay-radar-viewport {
+    position: absolute;
+    inset: 0;
+  }
+  .replay-team-panels {
+    position: absolute;
+    inset: auto 0.5rem 0.5rem;
+    display: flex;
+    justify-content: space-between;
+    pointer-events: none;
+    z-index: 40;
+  }
+  .replay-team-panel {
+    width: clamp(220px, calc((100cqw - min(100cqw, 100cqh)) / 2 - 16px), 340px);
+    pointer-events: auto;
+  }
+}
+
 /* Respect the user's motion preferences. */
 @media (prefers-reduced-motion: reduce) {
   .orb-1, .orb-2, .orb-3,
