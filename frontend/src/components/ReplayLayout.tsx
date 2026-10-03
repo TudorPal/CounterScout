@@ -23,6 +23,7 @@ import InsightsPanel from "./InsightsPanel";
 import LogoMark from "./LogoMark";
 import { matchIdentity, scoreAt, sideColor } from "../utils/replayState";
 import AppBackdrop from "./AppBackdrop";
+import AiRecapPanel from "./AiRecapPanel";
 
 const TABS = [
   { to: "", label: "Replay", end: true },
@@ -30,6 +31,7 @@ const TABS = [
   { to: "economy", label: "Economy", end: false },
   { to: "heatmap", label: "Heatmap", end: false },
   { to: "stats", label: "Stats", end: false },
+  { to: "recap", label: "AI Recap", end: false },
 ] as const;
 
 export default function ReplayLayout() {
@@ -158,7 +160,13 @@ export default function ReplayLayout() {
           <span className="hidden lg:inline text-[9px] text-scout-muted">{location.pathname === basePath ? "LIVE" : location.pathname.endsWith("/insights") ? "ROUND RESULT" : "FINAL"}</span>
         </header>
         <div className="flex-1 min-h-0 overflow-hidden">
+        {/* Keep recap mounted across view changes so requests/results survive
+            navigation without repeating a paid AI request. */}
+        <div className={location.pathname === `${basePath}/recap` ? "h-full" : "hidden"}>
+          <AiRecapPanel key={demoFile} demoFile={demoFile} />
+        </div>
         <Routes>
+          <Route path="recap" element={null} />
           <Route
             index
             element={

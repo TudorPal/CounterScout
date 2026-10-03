@@ -10,7 +10,7 @@
  * - Kill lines (attacker → victim) + X death markers
  * - Kill feed panel (right side, last 5 kills)
  * - Bomb plant/defuse indicators
- * - Round score ribbon, jump-to-round, playback controls, AI recap
+ * - Round score ribbon, jump-to-round, playback controls
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -18,7 +18,6 @@ import {
   MatchTimeline,
   RadarInfo,
   TimelinePosition,
-  getMatchReplayInsights,
   warmPlayerPhotosStatus,
 } from "../api/client";
 import PlayerAvatar from "./PlayerAvatar";
@@ -227,9 +226,6 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
       .catch(() => {});
   }, []);
   const [speed, setSpeed] = useState(1);
-  const [insights, setInsights] = useState<string | null>(null);
-  const [insightsLoading, setInsightsLoading] = useState(false);
-  const [insightsError, setInsightsError] = useState<string | null>(null);
   const [mapScale, setMapScale] = useState(1);
   const [mapPan, setMapPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
@@ -713,19 +709,6 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
   ]);
 
 
-
-  const handleGenerateInsights = async () => {
-    setInsightsError(null);
-    setInsightsLoading(true);
-    try {
-      const res = await getMatchReplayInsights(demoFile);
-      setInsights(res.summary);
-    } catch (e: any) {
-      setInsightsError(e?.response?.data?.detail ?? "Insights request failed");
-    } finally {
-      setInsightsLoading(false);
-    }
-  };
 
   return (
     <div className="flex flex-col h-full overflow-hidden">
@@ -1892,32 +1875,6 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
             })}
           </div>
 
-          {/* AI Recap */}
-          <div className="hud-panel p-2 flex flex-col gap-2 shrink-0">
-            <div className="flex items-center justify-between">
-              <p className="text-xs text-scout-muted uppercase tracking-[0.15em]">AI Recap</p>
-              <button onClick={handleGenerateInsights} disabled={insightsLoading}
-                className="hud-btn-primary text-xs"
-              >
-                {insightsLoading ? "Asking Claude…" : insights ? "Regenerate" : "Generate"}
-              </button>
-            </div>
-            {insightsError && (
-              <p className="text-xs text-scout-red border-l-2 border-scout-red/50 pl-2">
-                {insightsError}
-              </p>
-            )}
-            {insights && (
-              <div className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap overflow-y-auto" style={{ maxHeight: 200, scrollbarWidth: "thin" }}>
-                {insights}
-              </div>
-            )}
-            {!insights && !insightsError && !insightsLoading && (
-              <p className="text-xs text-scout-muted">
-                AI narrative recap of this match. First call takes ~5s.
-              </p>
-            )}
-          </div>
         </div>{/* /sidebar */}
       </div>{/* /main flex area */}
 
