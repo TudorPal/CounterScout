@@ -25,6 +25,7 @@ import PlayerAvatar from "./PlayerAvatar";
 import RoundOverview from "./RoundOverview";
 import ReplayEconomy from "./ReplayEconomy";
 import { matchIdentity, money, roundAnchor, scoreAt, snapshotAt, teamSide } from "../utils/replayState";
+import { roundClock } from "../utils/replayNavigation";
 
 const RADAR_PX = 1024;
 
@@ -676,6 +677,7 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
     return {org1:wins[2], org2:wins[3], round};
   }, [timeline, identity, currentTick]);
   const org1CurrentSide = teamSide(timeline, identity, 2, currentTick);
+  const clock = roundClock(timeline, currentTick);
 
   // Publish live status to parent (ReplayLayout) so the navbar can show
   // the canonical match header. Throttled to once per second of playback
@@ -805,10 +807,16 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
               });
             }}
           >
-            {bombState && <div aria-label="Bomb timer" className="absolute top-2 left-2 z-30 rounded-xl border border-scout-red/40 bg-scout-bg/90 px-3 py-2 pointer-events-none">
+            <div aria-label="Replay timers" className="absolute top-2 left-2 z-30 flex flex-col gap-2 pointer-events-none">
+            {clock && <div aria-label="Round clock" className="rounded-xl border border-white/10 bg-scout-bg/90 px-3 py-2">
+              <p className="text-[10px] uppercase tracking-wider text-scout-muted">Round {clock.round} · {clock.phase}</p>
+              <p className="text-xl font-bold font-mono tabular-nums text-white">{clock.time}</p>
+            </div>}
+            {bombState && <div aria-label="Bomb timer" className="rounded-xl border border-scout-red/40 bg-scout-bg/90 px-3 py-2">
               <p className="text-[10px] uppercase tracking-wider text-scout-red">Bomb planted · {bombState.site}</p>
               <p className="text-2xl font-bold font-mono tabular-nums text-scout-red">{Math.max(0,bombState.remaining).toFixed(0)}<span className="text-xs ml-1">s</span></p>
             </div>}
+            </div>
             {/* Zoom controls — floating overlay matching the Insights radar. */}
             <div className="absolute top-2 right-2 z-40 flex items-center gap-1 hud-panel px-1.5 py-0.5">
               <button onClick={(e) => { e.stopPropagation(); setMapScale((s) => { const n = Math.max(0.5, +(s - 0.1).toFixed(1)); if (n <= 1) setMapPan({ x: 0, y: 0 }); return n; }); }}

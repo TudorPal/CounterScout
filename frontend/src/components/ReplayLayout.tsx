@@ -142,7 +142,7 @@ export default function ReplayLayout() {
           <p className="text-scout-muted uppercase tracking-wider text-[10px]">Match</p>
           <p className="text-scout-muted text-[10px] break-all">{demoFile}</p>
           <p className="text-scout-muted">{timeline.map_name}</p>
-          {liveStatus && <p className="text-scout-accent">Round {liveStatus.round}{liveStatus.currentTimeStr && <><br /><span className="text-scout-muted">{liveStatus.currentTimeStr} / {liveStatus.totalTimeStr}</span></>}</p>}
+          {liveStatus && location.pathname !== basePath && <p className="text-scout-accent">Round {liveStatus.round}</p>}
           {matchInfo?.event && <p className="text-scout-muted break-words">{matchInfo.event}</p>}
         </div>
       </aside>
