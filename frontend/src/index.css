@@ -4,6 +4,14 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep every radar monochrome, including maps without a replacement PNG.
+   Only the base image is filtered: player, utility and heatmap overlays retain
+   their meaningful colours in both HTML and SVG radar consumers. */
+img[src*="/api/radars/"],
+image[href*="/api/radars/"] {
+  filter: grayscale(1);
+}
+
 :root {
   color-scheme: dark;
   --scout-background: #0b1118;

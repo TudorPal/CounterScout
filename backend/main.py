@@ -374,7 +374,7 @@ async def get_callouts(map_name: str):
     }
 
 
-# Radar assets come from `awpy get maps` — PNG overviews + per-map calibration
+# Radar assets use the project's greyscale PNG overviews + per-map calibration
 # (pos_x/pos_y = world coord of the image's top-left corner, scale = world
 # units per pixel). Copy-in location: backend/data/radars/.
 _RADAR_DIR = Path(__file__).resolve().parent / "data" / "radars"
@@ -388,7 +388,7 @@ except Exception as exc:
 
 @app.get("/api/radars/{map_name}.png", summary="Radar overview PNG for a map")
 async def get_radar_image(map_name: str):
-    """Serves the awpy-sourced radar PNG for the requested map."""
+    """Serve the project's radar PNG for the requested map."""
     path = _RADAR_DIR / f"{map_name}.png"
     if not path.exists():
         raise HTTPException(status_code=404, detail=f"No radar for {map_name}")
@@ -417,7 +417,7 @@ async def get_radar_info(map_name: str):
         "pos_y": info.get("pos_y"),
         "scale": info.get("scale"),
         "rotate": info.get("rotate", 0),
-        "image_url": f"/api/radars/{map_name}.png",
+        "image_url": f"/api/radars/{map_name}.png?v=greyscale-1",
     }
 
 
