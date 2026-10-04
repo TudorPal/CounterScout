@@ -10,6 +10,14 @@ function load(name) {
   return module.exports;
 }
 const {scoutTeamIds,buildScoutRounds,filterScoutTimeline,defaultScoutFilters}=load('teamScout');
+const {scoutTeamNames,scoutTeamDemos}=load('scoutDiscovery');
+const library=[{demo_file:'a.dem',map_name:'de_cache',team1_name:'Scouted',team2_name:'Enemy'},
+  {demo_file:'b.dem',map_name:'de_nuke',team1_name:'Other',team2_name:'scouted'},
+  {demo_file:'c.dem',map_name:'de_mirage',team1_name:'Other',team2_name:'Enemy'}];
+assert.equal(scoutTeamNames(library,{}).length,3,'Teams available before choosing a map, deduplicated case-insensitively');
+assert.deepEqual(scoutTeamDemos(library,{},'SCOUTED').map(d=>d.map_name),['de_cache','de_nuke']);
+assert.equal(scoutTeamDemos(library,{},'').length,3,'Map-first discovery remains possible');
+assert.equal(scoutTeamDemos(library,{'a.dem':{team1:{name:'Renamed'},team2:{name:'Enemy'}}},'Renamed').length,1);
 const info={team1:{name:'Scouted',players:['Old nickname'],players_detailed:[{steamid:'own'}]},team2:{name:'Enemy',players:['Enemy']}};
 const timeline={tick_rate:10,map_name:'de_mirage',tick_max:300,players:[{steamid:'own',name:'New nickname',team_num:3},{steamid:'enemy',name:'Enemy',team_num:2}],
   positions:{own:[{t:0,tn:3},{t:20,tn:2,alive:true,x:1,y:2},{t:30,tn:2,alive:true,x:2,y:3},{t:50,tn:2,alive:true,x:3,y:4},{t:90,tn:2,alive:false,x:4,y:5},

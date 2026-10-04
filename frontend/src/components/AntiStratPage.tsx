@@ -29,6 +29,7 @@ import TeamScoutExplorer from "./TeamScoutExplorer";
 import { buildScoutRounds, defaultScoutFilters, filterScoutTimeline, scoutTeamIds } from "../utils/teamScout";
 import type { ScoutFilters, ScoutSource } from "../utils/teamScout";
 import { roundAnchor, snapshotAt } from "../utils/replayState";
+import { scoutTeamNames, scoutTeamDemos } from "../utils/scoutDiscovery";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 const RADAR_PX = 1024;
@@ -213,10 +214,11 @@ export default function AntiStratPage() {
   }, []);
 
   // ── Unique maps ──
+  const teamDemos=useMemo(()=>scoutTeamDemos(allDemos,matchInfoCache,teamName),[allDemos,matchInfoCache,teamName]);
   const maps = useMemo(() => {
-    const s = new Set(allDemos.map((d) => d.map_name).filter(Boolean));
+    const s = new Set(teamDemos.map((d) => d.map_name).filter(Boolean));
     return Array.from(s).sort();
-  }, [allDemos]);
+  }, [teamDemos]);
 
   // ── Demos for selected map ──
   const mapDemos = useMemo(
@@ -244,26 +246,13 @@ export default function AntiStratPage() {
   }, [selectedMap, mapDemos.length]);
 
   // ── Discovered team names ──
-  const teamNames = useMemo(() => {
-    const names = new Set<string>();
-    for (const d of mapDemos) {
-      const mi = matchInfoCache[d.demo_file];
-      if (mi?.team1) names.add(mi.team1.name);
-      if (mi?.team2) names.add(mi.team2.name);
-    }
-    return Array.from(names).sort();
-  }, [mapDemos, matchInfoCache]);
+  const teamNames = useMemo(() => scoutTeamNames(allDemos,matchInfoCache), [allDemos,matchInfoCache]);
 
   // ── Demos matching team ──
   const matchedDemos = useMemo(() => {
     if (!teamName) return [];
-    const lower = teamName.toLowerCase();
-    return mapDemos.filter((d) => {
-      const mi = matchInfoCache[d.demo_file];
-      if (!mi) return false;
-      return mi.team1?.name.toLowerCase() === lower || mi.team2?.name.toLowerCase() === lower;
-    });
-  }, [mapDemos, matchInfoCache, teamName]);
+    return teamDemos.filter(d=>d.map_name===selectedMap);
+  }, [teamDemos, selectedMap, teamName]);
 
   // ── Analyze ──
   const handleAnalyze = useCallback(async () => {
@@ -287,7 +276,8 @@ export default function AntiStratPage() {
         if(version!==requestVersion.current)return;
 
         // Build steamid set for the team in this demo
-        const mi = matchInfoCache[d.demo_file];
+        const mi = matchInfoCache[d.demo_file] ?? await getMatchInfo(d.demo_file);
+        if(version!==requestVersion.current)return;
         const sids=scoutTeamIds(tl,mi,teamName);
         if(!sids.size)throw new Error("The selected roster could not be identified in the demo.");
         loaded.push({demoFile:d.demo_file,timeline:tl,info:mi,sids});
@@ -681,10 +671,17 @@ export default function AntiStratPage() {
             <p className="mt-2 text-sm font-semibold text-white">Configure the report</p>
           </div>
           <div className="space-y-1.5">
+            <label className="text-[10px] text-scout-muted uppercase tracking-[0.12em] font-semibold">Team</label>
+            <SearchableSelect ariaLabel="Scout team" allValue="" value={teamName}
+              onChange={v=>{requestVersion.current++;setTeamName(v);setSources([]);setPhase("idle");
+                if(!scoutTeamDemos(allDemos,matchInfoCache,v).some(d=>d.map_name===selectedMap))setSelectedMap("");}}
+              placeholder="Select a team…" options={[{value:"",label:"Select a team…"},...teamNames.map(t=>({value:t,label:t}))]}/>
+          </div>
+          <div className="space-y-1.5">
             <label className="text-[10px] text-scout-muted uppercase tracking-[0.12em] font-semibold">Map</label>
             <Select
               value={selectedMap}
-              onChange={(v) => { requestVersion.current++;setSelectedMap(v); setTeamName(""); setPhase("idle"); setSources([]); }}
+              onChange={(v) => { requestVersion.current++;setSelectedMap(v); setPhase("idle"); setSources([]); }}
               className="w-full"
               placeholder="Select a map…"
               options={[
@@ -693,35 +690,22 @@ export default function AntiStratPage() {
                   value: m,
                   label: m,
                   icon: mapIconPath(m),
-                  hint: `${allDemos.filter((d) => d.map_name === m).length}`,
+                  hint: `${teamDemos.filter((d) => d.map_name === m).length}`,
                 })),
               ]}
             />
           </div>
 
-          <div className="space-y-1.5">
-            <label className="text-[10px] text-scout-muted uppercase tracking-[0.12em] font-semibold">Team</label>
             {phase === "info" ? (
               <div className="flex items-center gap-2 py-2">
                 <div className="w-3 h-3 border border-scout-accent border-t-transparent rounded-full animate-spin" />
-                <span className="text-[11px] text-scout-muted">Discovering teams...</span>
+                <span className="text-[11px] text-scout-muted">Loading rosters…</span>
               </div>
-            ) : (
-              <SearchableSelect ariaLabel="Scout team" allValue=""
-                value={teamName}
-                onChange={(v) => { requestVersion.current++;setTeamName(v); setSources([]); setPhase("idle"); }}
-                placeholder={selectedMap ? "Select a team…" : "Pick a map first"}
-                options={[
-                  { value: "", label: selectedMap ? "Select a team…" : "Pick a map first", disabled: teamNames.length === 0 },
-                  ...teamNames.map((t) => ({ value: t, label: t })),
-                ]}
-              />
-            )}
-          </div>
+            ) : null}
 
           <button
             onClick={handleAnalyze}
-            disabled={!teamName || !selectedMap || phase === "timelines"}
+            disabled={!teamName || !selectedMap || !matchedDemos.length || phase === "timelines" || phase === "info"}
             className="hud-btn-primary w-full"
           >
             {phase === "timelines" ? (
@@ -1073,7 +1057,7 @@ function AntiStratEmptyState({
 }) {
   const hero = useReveal<HTMLDivElement>();
   const cards = useReveal<HTMLDivElement>();
-  const step = hasTeam ? 3 : hasMap ? 2 : 1;
+  const step = hasTeam && hasMap ? 3 : hasTeam ? 2 : 1;
 
   const features = [
     {
@@ -1141,9 +1125,9 @@ function AntiStratEmptyState({
 
         {/* Step indicator — matches sidebar flow */}
         <div className="mt-10 inline-flex items-center gap-3 px-4 py-2 rounded-full bg-white/[0.04] border border-white/10">
-          <StepDot n={1} label="Pick a map" active={step >= 1} done={step > 1} />
+          <StepDot n={1} label="Pick a team" active={step >= 1} done={hasTeam} />
           <div className="w-6 h-px bg-white/10" />
-          <StepDot n={2} label="Pick a team" active={step >= 2} done={step > 2} />
+          <StepDot n={2} label="Pick a map" active={step >= 2} done={hasMap} />
           <div className="w-6 h-px bg-white/10" />
           <StepDot n={3} label="Analyze" active={step >= 3} done={false} />
         </div>
