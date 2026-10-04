@@ -34,7 +34,8 @@ kubectl -n cs2 create secret generic cs2-secrets \
 ## Deploy
 
 ```bash
-kubectl apply -f k8s/
+# From the repository root:
+kubectl apply -f deployment/k8s/
 kubectl -n cs2 rollout status deploy/backend deploy/web
 ```
 

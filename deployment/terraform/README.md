@@ -27,6 +27,8 @@ pvesm set local --content iso,vztmpl,backup,snippets,import
 
 ## Usage (containerized CLI — no local install needed)
 
+Run these commands from `deployment/terraform/`.
+
 ```bash
 cp terraform.tfvars.example terraform.tfvars   # fill in token + ssh key
 docker run --rm -v "$PWD:/tf" -w /tf hashicorp/terraform:latest init
@@ -50,4 +52,4 @@ VM: a plan that wants to replace it will refuse to apply.
 `terraform apply` on empty state downloads the Debian 13 genericcloud image
 onto the node and builds the VM from it (cloud-init: static IP, debian user,
 SSH key). Then run the Ansible playbook (`../ansible`) to configure the OS,
-Docker, registry, k3s, runner, and app — see `ansible/README.md`.
+Docker, registry, k3s, runner, and app — see [Ansible instructions](../ansible/README.md).

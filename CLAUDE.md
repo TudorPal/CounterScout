@@ -49,6 +49,13 @@ frontend/src/
 ```
 
 ## Key patterns
+
+Support files: Windows setup/build launchers live in `scripts/windows/` (keep
+`run_dev.bat` at root for convenience), infrastructure in `deployment/`, and
+documentation images in `docs/screenshots/`. Portable build dependencies are
+`packaging/requirements-build.txt`; the Linux container lock is
+`deployment/docker/requirements.lock`. Do not move runtime `data/` or `demos/`.
+
 - Lineup clustering uses **bucket-based deduplication** by (throw_x, throw_y, throw_z, pitch, yaw) rounded to POS_BUCKET=75u / ANG_BUCKET=6deg
 - cluster_id in the frontend = SQLite auto-increment `id`, NOT the sequential bucket index
 - All CSS uses custom `hud-panel`, `hud-btn`, `hud-btn-primary`, `hud-corner`, `hud-tab` classes

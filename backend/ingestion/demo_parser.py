@@ -47,7 +47,16 @@ logger = logging.getLogger(__name__)
 # v3 adds round.freeze_end_tick + round_freeze_end events for timeout-aware
 # cross-round alignment in the patterns view.
 # v2 added player_hurt events ("hurt"); v1 was the pre-hurt schema.
-TIMELINE_CACHE_VERSION = 5
+# v6 omits non-finite position/projectile coordinates (NaN is not valid JSON).
+TIMELINE_CACHE_VERSION = 6
+
+
+def _finite_coordinate_rows(frame: pd.DataFrame, x: str = "X", y: str = "Y") -> pd.DataFrame:
+    """Missing demo coordinates are absent samples, not a location at (0, 0)."""
+    if x not in frame or y not in frame:
+        return frame.iloc[:0]
+    coords = frame[[x, y]].apply(pd.to_numeric, errors="coerce")
+    return frame.loc[np.isfinite(coords).all(axis=1)]
 
 # ---------------------------------------------------------------------------
 # Grenade type normalisation
@@ -1065,7 +1074,7 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
         for sid, group in df.groupby("steamid", sort=False):
             if sid not in real_sids:
                 continue
-            group = group.sort_values("tick")
+            group = _finite_coordinate_rows(group).sort_values("tick")
             samples: list[dict] = []
             for row in group.itertuples(index=False):
                 wpn = str(getattr(row, "active_weapon_name", "") or "")
@@ -1134,7 +1143,7 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
                     "t": int(getattr(row, "tick")),
                     "x": round(float(getattr(row, "X", 0.0) or 0.0), 1),
                     "y": round(float(getattr(row, "Y", 0.0) or 0.0), 1),
-                    "yaw": round(float(getattr(row, "yaw", 0.0) or 0.0), 1),
+                    "yaw": round(_opt_float("yaw") or 0.0, 1),
                     "alive": bool(getattr(row, "is_alive", False)),
                     "hp": _safe_int(getattr(row, "health", 0)),
                     "w": wpn if wpn else "",
@@ -1439,7 +1448,7 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
             # Also try adding "grenade" suffix for types like "smoke" → "smokegrenade"
             fallback = (gtype_clean + "grenade").map(WEAPON_TO_TYPE)
             g["grenade_type"] = g["grenade_type"].fillna(fallback)
-            g = g.dropna(subset=["grenade_type"])
+            g = _finite_coordinate_rows(g.dropna(subset=["grenade_type"]), "x", "y")
             g = g.sort_values(["grenade_entity_id", "tick"])
             # grenade_entity_id is recycled by the engine — the same ID can
             # appear for completely different grenades in later rounds. Split

@@ -6,6 +6,7 @@ selected Downloads directory. No arbitrary URLs or filesystem roots are read.
 from __future__ import annotations
 
 import asyncio
+import os
 import gzip
 import hashlib
 import json
@@ -289,7 +290,7 @@ def install_faceit_bridge(app, upload_demo, store=None):
     @router.get("/setup", dependencies=[Depends(app_only)])
     def setup():
         config = store.config()
-        return {**config, "extension_path": str(Path("browser-extension").resolve()), "last_seen": config.get("last_seen"),
+        return {**config, "extension_path": str(Path(os.environ.get("COUNTERSCOUT_EXTENSION_DIR", "browser-extension")).resolve()), "last_seen": config.get("last_seen"),
                 "required_version": BRIDGE_VERSION, "automation_ready": supports_automation(config.get("extension_version"))}
 
     @router.put("/setup", dependencies=[Depends(app_only)])

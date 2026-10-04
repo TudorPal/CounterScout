@@ -55,19 +55,19 @@ skills.md
 .mcp.json
 
 # ---- Terraform (state + secrets stay local) ----
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.*
-terraform/terraform.tfvars
-terraform/tf-token.json
-terraform/crash.log
-terraform/crash.*.log
-terraform/*.tfvars
-terraform/*.tfvars.json
-terraform/*.tfplan
+deployment/terraform/.terraform/
+deployment/terraform/*.tfstate
+deployment/terraform/*.tfstate.*
+deployment/terraform/terraform.tfvars
+deployment/terraform/tf-token.json
+deployment/terraform/crash.log
+deployment/terraform/crash.*.log
+deployment/terraform/*.tfvars
+deployment/terraform/*.tfvars.json
+deployment/terraform/*.tfplan
 
 # ---- Ansible ----
-ansible/*.retry
+deployment/ansible/*.retry
 
 # ---- Claude Code metadata ----
 .claude/
@@ -86,6 +86,7 @@ desktop.ini
 build/
 dist/
 *.spec
+!packaging/portable.spec
 
 # ---- Logs ----
 *.log

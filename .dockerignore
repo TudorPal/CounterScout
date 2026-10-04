@@ -33,7 +33,7 @@ backend/data/player_photos
 logs
 
 # Docs / assets not needed inside images
-screenshots
+docs
 README.md
 
 # Secrets
@@ -41,4 +41,12 @@ README.md
 .env.*
 
 # Compose file isn't part of any image
-docker-compose.yml
+deployment/compose.yaml
+deployment/terraform
+deployment/ansible
+deployment/k8s
+
+# Portable outputs and download caches are not container build inputs.
+build
+dist
+.cache

@@ -8,6 +8,8 @@ values — real values are never stored here.
 
 ## Control node (containerized — Ansible doesn't run on native Windows)
 
+Run these commands from `deployment/ansible/`.
+
 ```bash
 docker build -t cs2-ansible -f control-node.Dockerfile .
 docker run --rm -v "$PWD:/work" -v "$HOME/.ssh/id_ed25519:/key:ro" -w /work \

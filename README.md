@@ -1,5 +1,8 @@
 # CounterScout
 
+For a no-install, browser-based Windows release, see [portable build instructions](packaging/README.md).
+The shared release number is stored in `VERSION`; portable ZIPs include it in their name.
+
 ## Brand and interface
 
 CounterScout uses charcoal (`#0b1118`), slate panels (`#131e28`), sea-glass teal (`#5ee0c2`), and readable muted text (`#9aaabd`). Amber communicates warnings; T/CT and grenade colors retain their distinct meanings. Primary navigation is centered independently of page controls and moves into its own row on smaller screens. **Import** is the workspace for bringing matches into the library; old `/ingest` links still work.
@@ -11,49 +14,49 @@ Reload the unpacked **CounterScout — FACEIT Bridge** extension in Chrome after
 A pro-level CS2 demo analysis platform. Mines demos from HLTV and FACEIT, extracts every grenade throw, clusters identical lineups, ranks them by impact, and serves them on a HUD-styled dashboard. Includes a full 2D match replay viewer, an Insights panel with round/pattern/heatmap modes, economy tracking, per-player stats, cross-demo Player Profiles, AI-powered insights, and **automated opponent scouting reports** — a feature neither Refrag nor SCL.gg offer.
 
 ### 1. Home — Pick a module from the landing page
-![Landing Page](screenshots/landing.png)
+![Landing Page](docs/screenshots/landing.png)
 
 ### 2. Grenade Lineups — Browse impact-ranked pro lineups with scatter plot and technique detection
-![Grenade Lineups](screenshots/lineups.png)
+![Grenade Lineups](docs/screenshots/lineups.png)
 
 ### 3. Demo Picker — Upload or browse demos grouped by map, then open one to analyze
-![Demo Picker](screenshots/demo-picker.png)
+![Demo Picker](docs/screenshots/demo-picker.png)
 
 ### 4. Match Replay — Live 2D viewer with team-vs-team header, score, and bomb timer in the navbar
-![Match Replay](screenshots/replay.png)
+![Match Replay](docs/screenshots/replay.png)
 
 ### 5. Insights — Round overlay with utility damage paths, victim entry/exit markers, flash blinds, and AOE radii
-![Insights — Round mode](screenshots/insights.png)
+![Insights — Round mode](docs/screenshots/insights.png)
 
 ### 6. Insights · Patterns mode — Aggregate every round of one player or drill into a single round; live-scrub through the demo
-![Insights — Patterns](screenshots/insights-patterns.png)
+![Insights — Patterns](docs/screenshots/insights-patterns.png)
 
 ### 7. Insights · Heatmap mode — Aggregated grenade landings across the entire match, filterable by HE / Smoke / Flash / Molly
-![Insights — Heatmap](screenshots/insights-heatmap.png)
+![Insights — Heatmap](docs/screenshots/insights-heatmap.png)
 
 ### 8. Economy — Track equipment value and buy types round by round
-![Economy Tracker](screenshots/economy.png)
+![Economy Tracker](docs/screenshots/economy.png)
 
 ### 9. Heatmap — See where players position, die, and land utility
-![Heatmap](screenshots/heatmap.png)
+![Heatmap](docs/screenshots/heatmap.png)
 
 ### 10. Stats — Per-player scoreboard with K/D, HS%, first kills, and multi-kill rounds
-![Stats Panel](screenshots/stats.png)
+![Stats Panel](docs/screenshots/stats.png)
 
 ### 11. Anti-Strat — Select an opponent team and generate a scouting report
-![Anti-Strat Report](screenshots/anti-strat.png)
+![Anti-Strat Report](docs/screenshots/anti-strat.png)
 
 ### 12. Anti-Strat — Utility tendency and AWP position heatmaps
-![Anti-Strat Utility & AWP](screenshots/anti-strat-2.png)
+![Anti-Strat Utility & AWP](docs/screenshots/anti-strat-2.png)
 
 ### 13. Anti-Strat — Per-player breakdown with weapons, utility usage, and opening duels
-![Anti-Strat Player Breakdown](screenshots/anti-strat-3.png)
+![Anti-Strat Player Breakdown](docs/screenshots/anti-strat-3.png)
 
 ### 14. Players — Cross-demo per-player aggregates rebuilt from cached timelines
-![Players](screenshots/players.png)
+![Players](docs/screenshots/players.png)
 
 ### 15. Player Detail — Per-player profile with role radar, side/map splits, and recent match history
-![Player Detail](screenshots/player-detail.png)
+![Player Detail](docs/screenshots/player-detail.png)
 
 ---
 
@@ -158,7 +161,7 @@ Accessed from the Insights tab within any loaded demo:
 
 **One-shot (Windows):**
 ```bat
-install.bat
+scripts\windows\install.bat
 ```
 
 **Manual:**
@@ -226,7 +229,7 @@ checks prerequisites without starting servers.
 Start only one service if the other is already running:
 
 ```powershell
-.\run_backend.bat
+.\scripts\windows\run_backend.bat
 # Or: .\run_dev.bat --backend
 .\run_dev.bat --frontend
 ```
@@ -371,7 +374,7 @@ Open `http://localhost:5173`
 ### Run with Docker (production)
 ```bash
 cp .env.example .env    # fill in ANTHROPIC_API_KEY etc.
-docker compose up -d --build
+docker compose --env-file .env -f deployment/compose.yaml up -d --build
 ```
 
 Open `http://localhost` (set `WEB_PORT` in `.env` to publish on a different port).
@@ -380,16 +383,16 @@ Two images: nginx serves the built frontend and reverse-proxies `/api` to the
 FastAPI backend (single origin, no CORS). Demos, the SQLite DB, and parsed
 timeline caches persist in the `demos`, `app-data`, and `player-photos` named
 volumes. The backend runs as a non-root user with a pinned dependency lock
-(`requirements.lock`).
+(`deployment/docker/requirements.lock`).
 
 ### Self-hosted production deployment
 
 This repo also carries the full infrastructure-as-code for the production
 deployment on a self-hosted Proxmox box:
 
-- [`terraform/`](terraform/README.md) — VM provisioning via the Proxmox API (bpg provider)
-- [`ansible/`](ansible/README.md) — OS → Docker → registry → k3s → CI runner → app, idempotent
-- [`k8s/`](k8s/README.md) — Kubernetes manifests incl. Prometheus/Grafana monitoring
+- [`deployment/terraform/`](deployment/terraform/README.md) — VM provisioning via the Proxmox API (bpg provider)
+- [`deployment/ansible/`](deployment/ansible/README.md) — OS → Docker → registry → k3s → CI runner → app, idempotent
+- [`deployment/k8s/`](deployment/k8s/README.md) — Kubernetes manifests incl. Prometheus/Grafana monitoring
 - [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) — push-to-deploy on a self-hosted runner
 
 ---
@@ -564,10 +567,15 @@ counterscout/
 │       └── SettingsPanel.tsx   CS2 path + demo linking
 ├── demos/                     .dem files (gitignored)
 ├── data/                      SQLite DB + timeline cache (gitignored)
-├── install.bat                One-shot Windows installer
-├── run_backend.bat            Launch uvicorn
-├── run_frontend.bat           Launch Vite dev server
-└── requirements.txt
+├── scripts/windows/           Setup, backend/frontend and portable-build launchers
+├── deployment/                Compose, Dockerfiles, Kubernetes, Terraform and Ansible
+├── docs/screenshots/          Documentation images
+├── packaging/                 Portable launcher, build dependencies and instructions
+├── build/                     Generated intermediates and logs (gitignored)
+├── dist/                      Versioned portable releases (gitignored)
+├── run_dev.bat                Convenient development launcher
+├── VERSION                    Shared application release version
+└── requirements.txt           Runtime Python dependencies
 ```
 
 ---

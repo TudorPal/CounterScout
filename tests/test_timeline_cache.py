@@ -33,6 +33,16 @@ class TimelineCacheTests(unittest.TestCase):
         self.timeline.unlink()
         self.assertFalse(timeline_cache.ready(self.demo, self.timeline, TIMELINE_CACHE_VERSION))
 
+    def test_strict_atomic_json_keeps_previous_cache_on_bad_data(self):
+        original = self.timeline.read_bytes()
+        for value in (float("nan"), float("inf"), -float("inf")):
+            with self.assertRaises(ValueError):
+                timeline_cache.write(self.timeline, {"positions": {"player": [{"x": value}]}})
+            self.assertEqual(self.timeline.read_bytes(), original)
+            self.assertFalse(list(self.cache.glob("*.tmp")))
+        timeline_cache.write(self.timeline, {"positions": {"player": [{"x": 0.0}]}})
+        self.assertEqual(json.loads(self.timeline.read_text())["positions"]["player"][0]["x"], 0.0)
+
     def test_warm_endpoint_streams_json_without_loading_or_upserting_it(self):
         timeline_cache.mark_ready(self.demo, self.timeline, TIMELINE_CACHE_VERSION)
         with patch.object(main.settings, "demo_dir", self.root), patch.object(main, "_TIMELINE_CACHE_DIR", self.cache), \

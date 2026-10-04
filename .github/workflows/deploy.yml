@@ -8,9 +8,9 @@ on:
     branches: [main]
     paths-ignore:
       - "**.md"
-      - "screenshots/**"
-      - "terraform/**"
-      - "ansible/**"
+      - "docs/**"
+      - "deployment/terraform/**"
+      - "deployment/ansible/**"
 
 concurrency:
   group: deploy
@@ -30,9 +30,9 @@ jobs:
 
       - name: Build images
         run: |
-          docker build -f docker/backend.Dockerfile \
+          docker build -f deployment/docker/backend.Dockerfile \
             -t "$REGISTRY/counterscout-backend:$TAG" -t "$REGISTRY/counterscout-backend:latest" .
-          docker build -f docker/frontend.Dockerfile \
+          docker build -f deployment/docker/frontend.Dockerfile \
             -t "$REGISTRY/counterscout-web:$TAG" -t "$REGISTRY/counterscout-web:latest" .
 
       - name: Push to local registry
@@ -44,7 +44,7 @@ jobs:
 
       - name: Deploy to k3s
         run: |
-          kubectl apply -R -f k8s/
+          kubectl apply -R -f deployment/k8s/
           kubectl -n cs2 set image deploy/backend "backend=$REGISTRY/counterscout-backend:$TAG"
           kubectl -n cs2 set image deploy/web "nginx=$REGISTRY/counterscout-web:$TAG"
           kubectl -n cs2 rollout status deploy/backend --timeout=300s

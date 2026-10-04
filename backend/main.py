@@ -37,6 +37,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from backend.config import settings
+from backend.version import VERSION
 from backend.models.schemas import (
     HLTVMatch,
     TopLineupsResponse,
@@ -72,7 +73,7 @@ logger.info("== CounterScout starting (log level=%s) ==",
 app = FastAPI(
     title="CounterScout",
     description="Discover and practice pro-level grenade lineups powered by demoparser2, DBSCAN, and RCON.",
-    version="1.1.0",
+    version=VERSION,
 )
 
 app.add_middleware(
@@ -278,7 +279,7 @@ from backend.models.schemas import (  # noqa: E402
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok", "version": "1.1.0"}
+    return {"status": "ok", "version": VERSION}
 
 
 # ---------------------------------------------------------------------------
@@ -1717,8 +1718,7 @@ async def upload_demo(
         from backend.ingestion.demo_parser import extract_match_timeline
         bundle = await asyncio.to_thread(extract_match_timeline, dest)
         _TIMELINE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        with cache_path.open("w", encoding="utf-8") as f:
-            json.dump(bundle, f, separators=(",", ":"))
+        timeline_cache.write(cache_path, bundle)
         metadata = _faceit_team_metadata(faceit_metadata)
         ext_team1 = metadata.get("team1") if isinstance(metadata.get("team1"), dict) else {}
         ext_team2 = metadata.get("team2") if isinstance(metadata.get("team2"), dict) else {}
@@ -1916,8 +1916,7 @@ async def _serve_match_replay_timeline(name: str):
         raise HTTPException(status_code=500, detail=f"Timeline parse failed: {exc}")
 
     try:
-        with cache_path.open("w", encoding="utf-8") as f:
-            json.dump(bundle, f, separators=(",", ":"))
+        timeline_cache.write(cache_path, bundle)
     except Exception as exc:
         logger.warning("Could not cache timeline to %s: %s", cache_path, exc)
 
@@ -2983,8 +2982,7 @@ def _ensure_timeline_for_demo(demo_path: Path) -> bool:
             len(bundle.get("rounds", []) or []),
             len(bundle.get("events", []) or []),
         )
-        with cache_path.open("w", encoding="utf-8") as f:
-            json.dump(bundle, f, separators=(",", ":"))
+        timeline_cache.write(cache_path, bundle)
         _ensure_local_roster(demo_path.name, bundle)
         _ingest_state["demos_parsed_this_run"] += 1
         try:

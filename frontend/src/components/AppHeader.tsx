@@ -42,6 +42,7 @@ export default function AppHeader({ actions, middle }: AppHeaderProps) {
           onClick={() => navigate("/")}
           className="app-header-brand group"
           aria-label="CounterScout home"
+          title={`CounterScout v${import.meta.env.VITE_APP_VERSION}`}
         >
           <LogoMark className="w-6 h-6 transition-transform group-hover:scale-110" />
           <span className="text-[15px] font-semibold tracking-tight text-scout-text">Counter<span className="text-scout-accent">Scout</span></span>

@@ -48,7 +48,7 @@
 
 # kubectl diff exits 0 (no drift) / 1 (drift) / >1 (error) — apply only on drift
 - name: Check Kubernetes manifest drift
-  ansible.builtin.command: kubectl diff -R -f {{ app_dir }}/k8s/
+  ansible.builtin.command: kubectl diff -R -f {{ app_dir }}/deployment/k8s/
   environment:
     KUBECONFIG: /home/debian/.kube/config
   register: k8s_diff
@@ -57,7 +57,7 @@
   become: false
 
 - name: Apply Kubernetes manifests (app + monitoring)
-  ansible.builtin.command: kubectl apply -R -f {{ app_dir }}/k8s/
+  ansible.builtin.command: kubectl apply -R -f {{ app_dir }}/deployment/k8s/
   environment:
     KUBECONFIG: /home/debian/.kube/config
   when: k8s_diff.rc == 1

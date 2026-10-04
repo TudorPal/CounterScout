@@ -7,13 +7,14 @@ WORKDIR /app
 COPY frontend/package.json frontend/package-lock.json ./
 RUN npm ci
 COPY frontend/ ./
+COPY VERSION /VERSION
 RUN npm run build
 
 # ---- runtime stage: unprivileged nginx serves static + proxies /api ---------
 # nginx-unprivileged runs the master as uid 101 (not root) and listens on 8080
 FROM nginxinc/nginx-unprivileged:1.29-alpine
 
-COPY docker/nginx.conf /etc/nginx/conf.d/default.conf
+COPY deployment/docker/nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 
 EXPOSE 8080

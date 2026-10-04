@@ -77,10 +77,15 @@ def _find_rar_backend() -> Optional[str]:
             candidates.append(path)
 
     for path in candidates:
-        rarfile.UNRAR_TOOL = path
         try:
+            sevenzip = Path(path).stem.lower() in {"7z", "7za"}
+            if sevenzip:
+                rarfile.SEVENZIP_TOOL = path
+            else:
+                rarfile.UNRAR_TOOL = path
             # Ask rarfile to self-test the tool by probing its version
-            rarfile.tool_setup(force=True)
+            rarfile.tool_setup(unrar=not sevenzip, unar=False, bsdtar=False,
+                               sevenzip=sevenzip, sevenzip2=False, force=True)
             logger.info("RAR backend: %s", path)
             return path
         except Exception as exc:

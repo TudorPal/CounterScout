@@ -2,7 +2,7 @@
 echo ============================================================
 echo  CounterScout — First-Time Setup
 echo ============================================================
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 
 echo.
 echo [1/3] Installing Python dependencies...
@@ -44,6 +44,6 @@ echo  Next steps:
 echo    1. Edit .env and set your RCON_PASSWORD
 echo    2. Run:  run_dev.bat   (starts backend and frontend together)
 echo    3. Open: http://localhost:5173
-echo    4. Click "Ingest Demos" to pull pro match demos from HLTV
+echo    4. Open the Import workspace to add demos
 echo ============================================================
 pause

@@ -9,7 +9,7 @@ ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
 
-COPY requirements.lock .
+COPY deployment/docker/requirements.lock .
 RUN pip install -r requirements.lock
 
 # fail the build early if the Rust-backed parser wheel didn't install cleanly
@@ -31,6 +31,7 @@ RUN useradd --create-home --uid 1000 app
 WORKDIR /app
 COPY --from=builder /opt/venv /opt/venv
 COPY backend/ backend/
+COPY VERSION .
 
 # runtime state dirs — the compose file mounts named volumes over these, and
 # Docker copies this ownership onto each volume on first use

@@ -1,6 +1,23 @@
 """Small replay revision stamps, so a cache hit never loads a 100 MB JSON."""
 import json
+import os
 from pathlib import Path
+import tempfile
+
+
+def write(cache: Path, bundle: dict) -> None:
+    """Publish strict browser-valid JSON atomically; never serve a partial cache."""
+    cache.parent.mkdir(parents=True, exist_ok=True)
+    temporary = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=cache.parent,
+                                         prefix=cache.name + ".", suffix=".tmp", delete=False) as stream:
+            temporary = Path(stream.name)
+            json.dump(bundle, stream, separators=(",", ":"), allow_nan=False)
+        os.replace(temporary, cache)
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def revision(demo: Path, cache: Path, version: int) -> str:

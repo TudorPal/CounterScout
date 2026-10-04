@@ -4,7 +4,7 @@ variable "proxmox_endpoint" {
 }
 
 variable "proxmox_api_token" {
-  description = "user@realm!tokenid=uuid — see terraform/README.md for creation"
+  description = "user@realm!tokenid=uuid — see deployment/terraform/README.md for creation"
   type        = string
   sensitive   = true
 }
