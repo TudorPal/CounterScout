@@ -47,8 +47,9 @@ logger = logging.getLogger(__name__)
 # v3 adds round.freeze_end_tick + round_freeze_end events for timeout-aware
 # cross-round alignment in the patterns view.
 # v2 added player_hurt events ("hurt"); v1 was the pre-hurt schema.
+# v7 recognises bayonet knife kills and trims the restart/warmup before live play.
 # v6 omits non-finite position/projectile coordinates (NaN is not valid JSON).
-TIMELINE_CACHE_VERSION = 6
+TIMELINE_CACHE_VERSION = 7
 
 
 def _finite_coordinate_rows(frame: pd.DataFrame, x: str = "X", y: str = "Y") -> pd.DataFrame:
@@ -92,7 +93,41 @@ def _is_opening_knife_round(round_data: dict, events: list[dict]) -> bool:
     ]
     if len(deaths) < 3:
         return False
-    return all("knife" in str(event.get("data", {}).get("weapon", "")).lower() for event in deaths)
+    def is_knife(weapon: str) -> bool:
+        weapon = str(weapon).lower().removeprefix("weapon_")
+        # CS2 reports the original bayonet as "bayonet", not "knife_bayonet".
+        return weapon == "bayonet" or weapon.startswith("knife")
+
+    return all(is_knife(event.get("data", {}).get("weapon", "")) for event in deaths)
+
+
+def _build_played_rounds(start_ticks: list[int], freeze_end_ticks: list[int],
+                         end_rows: list[dict], events: list[dict]) -> tuple[list[dict], int]:
+    """Pair completed rounds, then discard side selection and its restart gap.
+
+    A real knife round can start at tick zero. Only the dummy *end* at zero
+    should be ignored. Repeated starts during FACEIT's restart/warmup are
+    resolved to the latest start before the next completed round.
+    """
+    rounds = []
+    prev_end = 0
+    for er in sorted(end_rows, key=lambda r: r["tick"]):
+        before = [s for s in start_ticks if prev_end <= s <= er["tick"]]
+        start = max(before) if before else prev_end
+        freezes = [f for f in freeze_end_ticks if start <= f <= er["tick"]]
+        rounds.append({"num": len(rounds) + 1, "start_tick": start,
+                       "freeze_end_tick": max(freezes) if freezes else None,
+                       "end_tick": er["tick"], "winner": er["winner"]})
+        prev_end = er["tick"]
+    discard_before_tick = 0
+    if rounds and _is_opening_knife_round(rounds[0], events):
+        knife = rounds.pop(0)
+        # Warmup combat can resume after the knife round, before the real
+        # pistol start. Trimming at the knife end alone leaks those events.
+        discard_before_tick = max(knife["end_tick"], rounds[0]["start_tick"] - 1 if rounds else 0)
+        for number, round_data in enumerate(rounds, start=1):
+            round_data["num"] = number
+    return rounds, discard_before_tick
 
 # grenade_type → detonation event name emitted by the CS2 engine
 DETONATE_EVENT_FOR_TYPE = {
@@ -187,6 +222,13 @@ class DemoParser:
 
         rounds_df = self._extract_rounds(parser)
         damage_df = self._extract_utility_damage(parser)
+
+        # Keep lineup round numbers aligned with replay after knife selection.
+        cutoff = rounds_df.attrs.get("discard_before_tick", 0)
+        if cutoff:
+            grenades_df = grenades_df[grenades_df["tick"] > cutoff].copy()
+            if not damage_df.empty:
+                damage_df = damage_df[damage_df["tick"] > cutoff].copy()
 
         df = self._merge(grenades_df, rounds_df, damage_df)
         df["map_name"] = resolved_map
@@ -756,13 +798,28 @@ class DemoParser:
         if df.empty:
             return pd.DataFrame()
 
-        out = pd.DataFrame(
-            {
-                "tick": df["tick"].astype("int64"),
-                "round_number": df["round"].astype("int64"),
-                "round_winner": df["winner"].astype(str),
-            }
-        ).reset_index(drop=True)
+        def event_ticks(name):
+            try:
+                frame = parser.parse_event(name)
+                return sorted(int(t) for t in frame["tick"] if pd.notna(t) and int(t) >= 0)
+            except Exception:
+                return []
+
+        try:
+            deaths = parser.parse_event("player_death")
+            events = [{"type": "death", "tick": int(row["tick"]),
+                       "data": {"weapon": row.get("weapon", "")}}
+                      for row in deaths.to_dict(orient="records")]
+        except Exception:
+            events = []
+        rows = [{"tick": int(row["tick"]), "winner": str(row["winner"])}
+                for row in df.to_dict(orient="records") if int(row["tick"]) > 0]
+        rounds, cutoff = _build_played_rounds(event_ticks("round_start"),
+                                             event_ticks("round_freeze_end"), rows, events)
+        out = pd.DataFrame([{"tick": r["end_tick"], "round_number": r["num"],
+                             "round_winner": r["winner"]} for r in rounds],
+                           columns=["tick", "round_number", "round_winner"])
+        out.attrs["discard_before_tick"] = cutoff
         return out
 
     def _extract_utility_damage(self, parser) -> pd.DataFrame:
@@ -1340,9 +1397,9 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
 
     start_ticks: list[int] = []
     if starts is not None and len(starts):
-        # Filter out the warmup round_start at tick 0 to match the round_end
-        # filter below — otherwise the round pairing is off by one.
-        start_ticks = sorted(int(t) for t in starts["tick"].tolist() if int(t) > 0)
+        # A valid knife round may start at zero; only dummy round_end rows
+        # are filtered. Starts and ends are paired by tick, not array index.
+        start_ticks = sorted(int(t) for t in starts["tick"].tolist() if int(t) >= 0)
         for t in start_ticks:
             events.append({"type": "round_start", "tick": int(t), "data": {}})
 
@@ -1370,51 +1427,12 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
             )
         end_rows.sort(key=lambda r: r["tick"])
 
-    # Pair starts/ends into numbered rounds. If starts are missing (rare on
-    # old demos), fall back to using the previous end_tick as the start.
-    # freeze_end_tick is the latest round_freeze_end at-or-before round_end.
-    prev_end = 0
-    for i, er in enumerate(end_rows):
-        start_tick = 0
-        if start_ticks:
-            before = [s for s in start_ticks if s <= er["tick"]]
-            if before:
-                start_tick = before[-1]
-        if start_tick == 0:
-            start_tick = prev_end
-        freeze_end_tick = 0
-        if freeze_end_ticks:
-            fbefore = [t for t in freeze_end_ticks if start_tick <= t <= er["tick"]]
-            if fbefore:
-                freeze_end_tick = fbefore[-1]
-        rounds.append(
-            {
-                "num": i + 1,
-                "start_tick": int(start_tick),
-                "freeze_end_tick": int(freeze_end_tick) if freeze_end_tick else None,
-                "end_tick": int(er["tick"]),
-                "winner": er["winner"],
-            }
-        )
-        prev_end = er["tick"]
-
-    # FACEIT demos can begin with an optional knife round used to choose
-    # starting sides. It is not part of the actual match and must not affect
-    # scores, replay navigation, player aggregates, or anti-strat reports.
-    # Remove its complete time range rather than just its round entry, so no
-    # positions, utility, or kill events can leak into a later calculation.
-    discard_before_tick = 0
-    if rounds and _is_opening_knife_round(rounds[0], events):
-        knife_round = rounds.pop(0)
-        discard_before_tick = int(knife_round["end_tick"])
-        for number, round_data in enumerate(rounds, start=1):
-            round_data["num"] = number
+    rounds, discard_before_tick = _build_played_rounds(start_ticks, freeze_end_ticks, end_rows, events)
+    if discard_before_tick:
         events = [event for event in events if int(event["tick"]) > discard_before_tick]
         logger.info(
-            "excluding FACEIT knife round from %s (ticks %d-%d)",
-            demo_path.name,
-            knife_round["start_tick"],
-            knife_round["end_tick"],
+            "excluding FACEIT knife round and pre-match restart from %s (through tick %d)",
+            demo_path.name, discard_before_tick,
         )
 
     events.sort(key=lambda e: e["tick"])

@@ -78,6 +78,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bundle", required=True, type=Path)
     parser.add_argument("--demo", type=Path)
+    parser.add_argument("--expect-rounds", type=int, help="Assert the real demo's competitive round count")
+    parser.add_argument("--expect-first-tick", type=int, help="Assert the live pistol start and exclusion of all earlier samples")
     parser.add_argument("--playwright-package", type=Path, help="Optional existing Playwright package for replay UI regression")
     args = parser.parse_args()
     bundle = args.bundle.resolve()
@@ -140,6 +142,14 @@ def main():
                     timeline = payload("/api/match-replay/portable-smoke.dem/timeline")
                     assert info["map_name"].startswith("de_"), info
                     assert timeline["rounds"], timeline.keys()
+                    if args.expect_rounds is not None:
+                        assert len(timeline["rounds"]) == args.expect_rounds, len(timeline["rounds"])
+                    if args.expect_first_tick is not None:
+                        start = args.expect_first_tick
+                        assert timeline["rounds"][0]["start_tick"] == start, timeline["rounds"][0]
+                        assert all(e["tick"] >= start for e in timeline["events"])
+                        assert all(s["t"] >= start for samples in timeline["positions"].values() for s in samples)
+                        assert all(g["points"][0][0] >= start for g in timeline["grenades"])
                     print(f"PASS native parser/replay: {info['map_name']}, {len(timeline['rounds'])} rounds", flush=True)
                     if args.playwright_package:
                         ui = subprocess.run([shutil.which("node"), str(Path(__file__).parent / "test_replay_workspace.mjs"),

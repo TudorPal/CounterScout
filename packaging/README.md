@@ -42,9 +42,10 @@ replace an already shared ZIP with different code under the same version.
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p test_portable.py
-.\.venv\Scripts\python.exe scripts\test_portable_bundle.py --bundle dist\CounterScout-1.1.1-windows-x64
+$version = (Get-Content VERSION).Trim()
+.\.venv\Scripts\python.exe scripts\test_portable_bundle.py --bundle "dist\CounterScout-$version-windows-x64"
 # Optional full upload/replay test with a real local demo (never shipped):
-.\.venv\Scripts\python.exe scripts\test_portable_bundle.py --bundle dist\CounterScout-1.1.1-windows-x64 --demo demos\example.dem
+.\.venv\Scripts\python.exe scripts\test_portable_bundle.py --bundle "dist\CounterScout-$version-windows-x64" --demo demos\example.dem
 ```
 
 Tests use an isolated temporary data directory, strip Python/Node and archivers
@@ -53,3 +54,18 @@ pairing, duplicate launch, occupied-port errors, shutdown and data persistence.
 An actual Chrome/faceit.com download and a clean Windows VM remain release checks.
 The launcher intentionally keeps a console open for Ctrl+C and useful diagnostics.
 This initial build is unsigned; public distribution should add code signing.
+
+## Share through GitHub Releases
+
+After testing the build, commit and push the source changes (including `VERSION`).
+In your GitHub repository, open **Releases → Draft a new release**, create a tag
+matching the version (for example `v1.1.2`) on that commit, and attach
+`dist/CounterScout-1.1.2-windows-x64.zip` before publishing. Do not upload it as
+a regular repository file. Friends download this attached portable ZIP under
+**Assets**, not GitHub's automatically generated source-code ZIP.
+
+You can link the repository's `/releases/latest` page from the README; the asset's
+download link is also available from the published release. Publishing is a
+separate step: the local build does not create or upload a release automatically.
+
+See [GitHub's release guide](https://docs.github.com/en/repositories/releasing-projects-on-github/managing-releases-in-a-repository).
