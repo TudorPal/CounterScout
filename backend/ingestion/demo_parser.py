@@ -49,7 +49,35 @@ logger = logging.getLogger(__name__)
 # v2 added player_hurt events ("hurt"); v1 was the pre-hurt schema.
 # v7 recognises bayonet knife kills and trims the restart/warmup before live play.
 # v6 omits non-finite position/projectile coordinates (NaN is not valid JSON).
-TIMELINE_CACHE_VERSION = 7
+# v8 resolves bombsites from named navigation zones, never entity-ID order.
+TIMELINE_CACHE_VERSION = 8
+
+
+def _bombsite_label(row: dict) -> str:
+    """The site's entity index is not an A/B label (Cache reverses it)."""
+    raw = str(row.get("site", "")).upper()
+    if raw in {"A", "B"}:
+        return raw
+    place = str(row.get("user_last_place_name", "")).replace(" ", "").replace("_", "").lower()
+    if place in {"bombsitea", "sitea"}:
+        return "A"
+    if place in {"bombsiteb", "siteb"}:
+        return "B"
+    # m_nWhichBombZone is the player's named bomb zone, not the trigger entity.
+    try:
+        return {1: "A", 2: "B"}.get(int(row.get("user_which_bomb_zone")), "?")
+    except (ValueError, TypeError, OverflowError):
+        return "?"
+
+
+def _bombsite_mapping(rows: list[dict]) -> dict[str, str]:
+    """Resolve all plant rows first so earlier events cannot keep stale labels."""
+    labels: dict[str, set[str]] = {}
+    for row in rows:
+        label = _bombsite_label(row)
+        if label != "?":
+            labels.setdefault(str(row.get("site", "")), set()).add(label)
+    return {raw: next(iter(values)) if len(values) == 1 else "?" for raw, values in labels.items()}
 
 
 def _finite_coordinate_rows(frame: pd.DataFrame, x: str = "X", y: str = "Y") -> pd.DataFrame:
@@ -1249,9 +1277,9 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
     # ---- events --------------------------------------------------------
     events: list[dict] = []
 
-    def _push_events(raw_name: str, mapper):
+    def _push_events(raw_name: str, mapper, event_frame=None):
         try:
-            edf = parser.parse_event(raw_name)
+            edf = event_frame if event_frame is not None else parser.parse_event(raw_name)
         except Exception as exc:
             logger.debug("%s parse failed: %s", raw_name, exc)
             return
@@ -1324,31 +1352,19 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
             }) if _str(r.get("weapon")) in _UTIL_HURT_WEAPONS else None
         ),
     )
-    # demoparser2 returns bomb site as an entity index (e.g. 504, 505).
-    # Track the first two unique indices seen and map them to A / B.
-    _bomb_site_ids: dict[str, str] = {}
+    try:
+        plants = parser.parse_event("bomb_planted", player=["X", "Y", "last_place_name", "which_bomb_zone"])
+    except Exception as exc:
+        logger.debug("Named bomb zones unavailable: %s", exc)
+        try:
+            plants = parser.parse_event("bomb_planted")
+        except Exception:
+            plants = pd.DataFrame()
+    site_ids = _bombsite_mapping(plants.to_dict(orient="records") if plants is not None else [])
 
-    def _site_label(raw: str) -> str:
-        """Convert a demoparser2 site entity index to 'A' or 'B'."""
-        if raw in ("A", "B", "a", "b"):
-            return raw.upper()
-        if raw not in _bomb_site_ids:
-            if len(_bomb_site_ids) == 0:
-                _bomb_site_ids[raw] = "A"
-            elif len(_bomb_site_ids) == 1:
-                # Lower entity ID → A, higher → B
-                existing_raw = next(iter(_bomb_site_ids))
-                try:
-                    if int(raw) < int(existing_raw):
-                        _bomb_site_ids[existing_raw] = "B"
-                        _bomb_site_ids[raw] = "A"
-                    else:
-                        _bomb_site_ids[raw] = "B"
-                except ValueError:
-                    _bomb_site_ids[raw] = "B"
-            else:
-                _bomb_site_ids[raw] = "?"
-        return _bomb_site_ids.get(raw, "?")
+    def _site_label(row: dict) -> str:
+        label = _bombsite_label(row)
+        return label if label != "?" else site_ids.get(_str(row.get("site")), "?")
 
     _push_events(
         "bomb_planted",
@@ -1356,11 +1372,12 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
             "bomb_plant",
             {
                 "planter": _str(r.get("user_steamid")),
-                "site": _site_label(_str(r.get("site"))),
+                "site": _site_label(r),
                 "x": _str(r.get("user_X", "")),
                 "y": _str(r.get("user_Y", "")),
             },
         ),
+        event_frame=plants,
     )
     _push_events(
         "bomb_defused",
@@ -1368,7 +1385,7 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
             "bomb_defuse",
             {
                 "defuser": _str(r.get("user_steamid")),
-                "site": _site_label(_str(r.get("site"))),
+                "site": _site_label(r),
             },
         ),
     )
