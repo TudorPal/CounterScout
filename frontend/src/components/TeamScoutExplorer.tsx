@@ -8,13 +8,14 @@ const colors=["#5ee0c2","#DCBF6E","#5B9BD5","#c69bf4","#f58c82","#92bd62","#f3ab
 const utilityColors:Record<string,string>={smokegrenade:"#d6e1e9",hegrenade:"#f58c82",flashbang:"#DCBF6E",molotov:"#ff944b"};
 export default function TeamScoutExplorer({rounds,radar,teamName,postplant}: {rounds:ScoutRound[];radar:RadarInfo;teamName:string;postplant:boolean}) {
   const [mode,setMode]=useState<"movement"|"utility">("movement");
-  const [player,setPlayer]=useState("");const [utility,setUtility]=useState("all");
+  const [hiddenPlayers,setHiddenPlayers]=useState<Set<string>>(new Set());const [utility,setUtility]=useState("all");
   const [elapsed,setElapsed]=useState(30);const [playing,setPlaying]=useState(false);
   const canvas=useRef<HTMLCanvasElement>(null);
   const players=useMemo(()=>Array.from(new Map(rounds.flatMap(r=>r.players.map(p=>[p.steamid,p] as const))).values()),[rounds]);
   const playerColors=useMemo(()=>new Map(players.map((p,i)=>[p.steamid,colors[i%colors.length]])),[players]);
   const duration=Math.ceil(Math.max(1,...rounds.map(r=>r.duration)));
-  useEffect(()=>{setElapsed(Math.min(30,duration));setPlaying(false);setPlayer("");},[rounds,duration]);
+  useEffect(()=>{setElapsed(Math.min(30,duration));setPlaying(false);},[rounds,duration]);
+  useEffect(()=>setHiddenPlayers(new Set()),[teamName]);
   useEffect(()=>{
     if(!playing)return;const timer=window.setInterval(()=>setElapsed(v=>{if(v>=duration){setPlaying(false);return duration;}return Math.min(duration,v+0.5);}),250);
     return ()=>window.clearInterval(timer);
@@ -26,7 +27,7 @@ export default function TeamScoutExplorer({rounds,radar,teamName,postplant}: {ro
     for(const r of rounds) {
       const until=r.anchor+elapsed*r.tickRate;
       if(mode==="movement") for(const p of r.players) {
-        if(player && p.steamid!==player)continue;
+        if(hiddenPlayers.has(p.steamid))continue;
         ctx.strokeStyle=playerColors.get(p.steamid)!;ctx.globalAlpha=alpha;ctx.lineWidth=2.5;ctx.beginPath();
         let started=false,lastTick=-Infinity;
         for(const s of r.positions[p.steamid]) {
@@ -43,7 +44,7 @@ export default function TeamScoutExplorer({rounds,radar,teamName,postplant}: {ro
         }
       }
       if(mode==="utility") for(const g of r.grenades) {
-        if(player && g.thrower!==player || utility!=="all" && g.type!==utility || g.points[0][0]>until)continue;
+        if(hiddenPlayers.has(g.thrower) || utility!=="all" && g.type!==utility || g.points[0][0]>until)continue;
         ctx.strokeStyle=utilityColors[g.type] ?? "#5ee0c2";ctx.fillStyle=ctx.strokeStyle;ctx.globalAlpha=alpha;ctx.lineWidth=2;ctx.beginPath();
         let first=true;
         for(const [tick,wx,wy] of g.points) {
@@ -56,25 +57,47 @@ export default function TeamScoutExplorer({rounds,radar,teamName,postplant}: {ro
       }
     }
     ctx.globalAlpha=1;
-  },[rounds,elapsed,mode,player,utility,radar,playerColors]);
-  const throws=useMemo(()=>rounds.flatMap(r=>r.grenades.map(g=>({r,g}))).filter(({g})=>(!player || player===g.thrower) && (utility==="all" || utility===g.type)),[rounds,player,utility]);
+  },[rounds,elapsed,mode,hiddenPlayers,utility,radar,playerColors]);
+  const throws=useMemo(()=>rounds.flatMap(r=>r.grenades.map(g=>({r,g}))).filter(({g})=>!hiddenPlayers.has(g.thrower) && (utility==="all" || utility===g.type)),[rounds,hiddenPlayers,utility]);
+  const playerStats=useMemo(()=>new Map(players.map(p=>[p.steamid,{
+    rounds:rounds.filter(r=>r.positions[p.steamid]?.length).length,
+    throws:rounds.reduce((sum,r)=>sum+r.grenades.filter(g=>g.thrower===p.steamid).length,0),
+  }])),[players,rounds]);
   return <section className="hud-panel p-5" aria-label="Team movement and utility explorer">
     <div className="flex flex-wrap justify-between gap-3 items-start"><div><h2 className="text-lg font-semibold">{teamName} · Movement & utility</h2>
       <p className="text-xs text-scout-muted mt-1">{rounds.length} rounds overlaid · {postplant?"Aligned to bomb plant":"Aligned to freeze-time end"} · Only this team’s players and utility</p></div>
       <div className="flex gap-1">{(["movement","utility"] as const).map(m=><button key={m} aria-pressed={mode===m} onClick={()=>setMode(m)} className={`hud-tab ${mode===m?"hud-tab-active":"hud-tab-idle"}`}>{m==="movement"?"Movement":"Utility"}</button>)}</div></div>
-    <div className="flex flex-wrap gap-3 mt-4"><SearchableSelect ariaLabel="Scout player" value={player} allValue="" onChange={setPlayer} options={[{value:"",label:"All team players"},...players.map(p=>({value:p.steamid,label:p.name}))]}/>
+    <div className="flex flex-wrap gap-3 mt-4">
       {mode==="utility" && <SearchableSelect ariaLabel="Scout grenade type" value={utility} allValue="all" onChange={setUtility} options={[{value:"all",label:"All utility"},{value:"smokegrenade",label:"Smoke"},{value:"flashbang",label:"Flash"},{value:"hegrenade",label:"HE"},{value:"molotov",label:"Molotov"}]}/>}
     </div>
-    <div className="relative mx-auto w-full max-w-[740px] aspect-square mt-3 rounded-lg overflow-hidden bg-black/10">
+    <div className="grid xl:grid-cols-[260px_minmax(0,1fr)] gap-4 mt-3 items-start">
+      <aside className="hud-panel p-3" aria-label={`${teamName} player selection`}>
+        <div className="flex items-center justify-between gap-2 mb-3"><h3 className="font-semibold text-sm truncate">{teamName}</h3>
+          <input type="checkbox" aria-label="Select all scout players" checked={players.length>0 && players.every(p=>!hiddenPlayers.has(p.steamid))}
+            ref={node=>{if(node)node.indeterminate=players.some(p=>hiddenPlayers.has(p.steamid)) && players.some(p=>!hiddenPlayers.has(p.steamid));}}
+            onChange={e=>setHiddenPlayers(e.target.checked?new Set():new Set(players.map(p=>p.steamid)))} className="accent-scout-accent"/>
+        </div>
+        <table className="w-full text-sm"><thead className="text-[10px] uppercase text-scout-muted"><tr><th className="text-left pb-2 font-normal">Player</th><th className="text-right pb-2 font-normal">Rounds</th><th className="text-right pb-2 font-normal">Throws</th></tr></thead>
+          <tbody>{players.map(p=><tr key={p.steamid} className={hiddenPlayers.has(p.steamid)?"opacity-50":""}>
+            <td className="py-2"><label className="flex gap-2 items-center cursor-pointer"><input type="checkbox" aria-label={`Show ${p.name}`} checked={!hiddenPlayers.has(p.steamid)}
+              onChange={e=>setHiddenPlayers(prev=>{const next=new Set(prev);if(e.target.checked)next.delete(p.steamid);else next.add(p.steamid);return next;})} className="accent-scout-accent"/>
+              <span className="w-2 h-2 rounded-full shrink-0" style={{background:playerColors.get(p.steamid)}}/><span className="font-semibold break-all">{p.name}</span></label></td>
+            <td className="text-right font-mono text-xs">{playerStats.get(p.steamid)?.rounds}</td><td className="text-right font-mono text-xs">{playerStats.get(p.steamid)?.throws}</td>
+          </tr>)}</tbody>
+        </table>
+        <p className="text-xs text-scout-muted mt-2">Select players to show their paths and utility. Counts cover the selected rounds.</p>
+      </aside>
+    <div className="relative mx-auto w-full max-w-[740px] aspect-square rounded-lg overflow-hidden bg-black/10">
       <img src={radar.image_url} alt={`${teamName} movement on map radar`} className="absolute inset-0 w-full h-full"/>
       <canvas ref={canvas} width={1024} height={1024} className="absolute inset-0 w-full h-full"/>
       {!rounds.length && <div className="absolute inset-0 flex items-center justify-center"><p role="status" className="hud-panel p-4 text-sm">No rounds match these filters.</p></div>}
     </div>
+    </div>
     <div className="flex items-center gap-3 mt-3"><button className="hud-btn" disabled={!rounds.length} onClick={()=>{if(elapsed>=duration)setElapsed(0);setPlaying(v=>!v);}}>{playing?"Pause":"Play"}</button>
       <input type="range" aria-label="Scout elapsed time" min={0} max={duration} step={0.5} value={elapsed} onChange={e=>{setPlaying(false);setElapsed(Number(e.target.value));}} className="flex-1 accent-scout-accent"/>
       <span className="text-xs font-mono w-28 text-right">{elapsed.toFixed(1)}s / {duration}s</span></div>
-    <p className="text-xs text-scout-muted mt-2">{postplant?"Seconds after plant":"Seconds into live round"}. Paths accumulate up to the selected time; dots show players in rounds still in progress. Use fewer matches or one player to reduce overlap.</p>
-    {mode==="movement"?<div className="flex flex-wrap gap-x-4 gap-y-2 mt-3">{players.filter(p=>!player || player===p.steamid).map(p=><span key={p.steamid} className="text-xs" style={{color:playerColors.get(p.steamid)}}>● {p.name}</span>)}</div>:
+    <p className="text-xs text-scout-muted mt-2">{postplant?"Seconds after plant":"Seconds into live round"}. Paths accumulate up to the selected time; dots show players in rounds still in progress. Deselect players or matches to reduce overlap.</p>
+    {mode==="utility" &&
       <details className="mt-3 text-sm"><summary className="cursor-pointer">Throws in selected rounds ({throws.length})</summary><div className="max-h-64 overflow-auto mt-2">{throws.map(({r,g},i)=><div key={`${r.key}:${i}`} className="flex gap-3 border-b border-white/5 py-2 text-xs"><span className="flex-1">{r.players.find(p=>p.steamid===g.thrower)?.name}</span><span>{g.type.replace("grenade","")}</span><span>R{r.round.num} · {r.side}</span><span>{((g.points[0][0]-r.anchor)/r.tickRate).toFixed(1)}s</span></div>)}</div></details>}
   </section>;
 }
