@@ -40,3 +40,19 @@ export function demoUrls(raw) {
     try {return demoDownload({url:value});} catch {return false;}
   }))].slice(0,5);
 }
+
+export function reviewedSyncNames(matches, edits, applyHistory=true) {
+  const reviewed={};
+  for(const reference of matches) for(const [key,alias] of Object.entries(edits[reference.id] || {})) {
+    const team=reference.teams[key];if(!team)continue;
+    const members=new Set(team.roster.map(p=>p.game_player_id || p.nickname?.toLowerCase()).filter(Boolean));
+    for(const match of matches) for(const [slot,candidate] of Object.entries(match.teams)) {
+      const overlap=candidate.roster.filter(p=>members.has(p.game_player_id || p.nickname?.toLowerCase())).length;
+      const same=team.id && candidate.id ? team.id===candidate.id : overlap>=2;
+      if(match.id===reference.id && slot===key || applyHistory && same) {
+        reviewed[match.id] ??= {};reviewed[match.id][slot]=alias;
+      }
+    }
+  }
+  return reviewed;
+}

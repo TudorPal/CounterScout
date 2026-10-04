@@ -26,6 +26,7 @@ import { mapIconPath } from "../utils/mapIcons";
 import AppBackdrop from "./AppBackdrop";
 import { useReveal } from "../hooks/useReveal";
 import SearchableSelect from "./SearchableSelect";
+import DemoTeamEditor from "./DemoTeamEditor";
 
 const formatBytes = (n: number): string => {
   if (n < 1024) return `${n} B`;
@@ -84,6 +85,7 @@ export default function DemoPickerPage() {
 
   // Delete state
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [editingDemo, setEditingDemo] = useState<string | null>(null);
 
   // CS2 link status
   const [linkInfo, setLinkInfo] = useState<Cs2PathResponse | null>(null);
@@ -489,11 +491,13 @@ export default function DemoPickerPage() {
               </button>
               <span className="hidden md:block text-xs text-scout-muted text-right whitespace-nowrap">{formatDate(d.mtime)}<br />{formatBytes(d.size_bytes)}</span>
               <button onClick={() => navigate(`/replay/${encodeURIComponent(d.demo_file)}`)} className="hud-btn-primary text-xs">Watch →</button>
+              <button onClick={() => setEditingDemo(d.demo_file)} aria-label={`Edit teams for ${d.demo_file}`} className="hud-btn text-xs">Edit teams</button>
               <button onClick={() => handleDelete(d.demo_file)} disabled={deleting === d.demo_file} aria-label={`Delete ${d.demo_file}`} className="hud-btn text-scout-red text-xs">{deleting === d.demo_file ? "…" : "Delete"}</button>
             </div>)}
           </div>)}
         </section>;
       })}
+      {editingDemo && <DemoTeamEditor demoFile={editingDemo} onClose={() => setEditingDemo(null)} onSaved={() => { setEditingDemo(null); loadDemos(true); }} />}
       </div>{/* /max-w-7xl content */}
       </div>{/* /scrollable */}
     </div>

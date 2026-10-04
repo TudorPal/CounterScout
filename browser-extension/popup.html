@@ -4,5 +4,14 @@
 <label for="token">Pairing code from Import</label><input id="token" type="password" autocomplete="off">
 <label class="toggle"><input id="enabled" type="checkbox"> Enable team sync and automatic demo imports</label>
 <button id="connect">Save & connect</button><button id="sync">Sync current FACEIT page</button>
+<section id="review" hidden aria-label="Review team names before syncing">
+<h2>Review teams before syncing</h2>
+<p class="hint">Nothing is saved until you confirm. Rosters identify the teams, regardless of T/CT side.</p>
+<label for="review-match">Match</label><select id="review-match"></select>
+<label for="team1">Team 1 name</label><input id="team1" maxlength="80"><p id="roster1" class="roster"></p>
+<label for="team2">Team 2 name</label><input id="team2" maxlength="80"><p id="roster2" class="roster"></p>
+<label class="toggle"><input id="apply-history" type="checkbox" checked> Apply changed names to matching teams in this history</label>
+<button id="confirm-sync">Confirm & sync</button><button id="cancel-sync">Cancel</button>
+</section>
 <p id="status" role="status">Not connected yet.</p><p class="hint">Downloads must finish before import starts. Keep the backend running. Login and download permissions stay with FACEIT.</p>
-<script src="popup.js"></script></body></html>
+<script type="module" src="popup.js"></script></body></html>

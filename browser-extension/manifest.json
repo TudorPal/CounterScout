@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "minimum_chrome_version": "120",
   "name": "CounterScout — FACEIT Bridge",
-  "version": "0.2.2",
+  "version": "0.3.0",
   "description": "Sync FACEIT team matches and import completed demo downloads into your local CounterScout.",
   "permissions": ["downloads", "storage", "alarms"],
   "host_permissions": ["https://www.faceit.com/*", "https://api.faceit.com/*", "http://localhost/*", "http://127.0.0.1/*"],

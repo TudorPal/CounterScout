@@ -72,6 +72,33 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(match["team1"]["score"], 0)
         self.assertEqual(match["team1"]["steamids"], ["76561198000000001"])
 
+    def test_reviewed_names_survive_resync_and_are_used_for_download_import(self):
+        self.post("/matches", {"team_id": TEAM, "matches": [metadata()],
+                  "reviewed_names": {MATCH: {"faction1": "My reviewed team"}}})
+        self.post("/matches", {"team_id": TEAM, "matches": [metadata()]})
+        library = self.client.get(PREFIX + "/library").json()
+        self.assertEqual(library["matches"][0]["team1"]["name"], "My reviewed team")
+        self.assertEqual(library["matches"][0]["team2"]["name"], "Panico eSports")
+        path = self.demo("reviewed.dem")
+        result = self.post("/imports", {"match_id": MATCH, "path": str(path), "metadata": metadata()})
+        self.assertEqual(result.status_code, 202)
+        uploaded = json.loads(self.uploads[-1]["faceit_metadata"])
+        self.assertEqual(uploaded["team1"]["name"], "My reviewed team")
+        self.assertEqual(uploaded["team2"]["name"], "Panico eSports")
+
+    def test_reviewed_alias_follows_roster_swap_and_rejects_invalid_names(self):
+        self.post("/matches", {"team_id": TEAM, "matches": [metadata()],
+                  "reviewed_names": {MATCH: {"faction1": "Reviewed"}}})
+        swapped = metadata()
+        teams = swapped["payload"]["teams"]
+        teams["faction1"], teams["faction2"] = teams["faction2"], teams["faction1"]
+        self.post("/matches", {"team_id": TEAM, "matches": [swapped]})
+        value = self.client.get(PREFIX + "/library").json()["matches"][0]
+        self.assertEqual(value["team2"]["name"], "Reviewed")
+        self.assertEqual(value["team1"]["name"], "Panico eSports")
+        for names in ({"faction1": " "}, {"faction1": "x" * 81}, {"faction1": "Same", "faction2": "same"}):
+            self.assertEqual(self.post("/matches", {"team_id": TEAM, "matches": [metadata()], "reviewed_names": {MATCH: names}}).status_code, 422)
+
     def test_token_origin_hostname_and_loopback_guards(self):
         self.assertEqual(self.client.get(PREFIX + "/commands").status_code, 401)
         self.assertEqual(self.client.get(PREFIX + "/setup", headers={"Origin": "https://evil.test"}).status_code, 403)

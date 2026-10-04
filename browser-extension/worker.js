@@ -43,7 +43,7 @@ async function detail(id,tabId) {
   if(!r.ok) throw new Error('FACEIT metadata returned '+r.status+'. Open the match room, sign in normally, and sync it again.');
   return publicMatch(await r.json());
 }
-async function syncPage(tabId,teamId='',commandId=null) {
+async function syncPage(tabId,teamId='',commandId=null,preview=false) {
   const page=await tabMessage(tabId,{type:'capture'});
   const ids=page.match_id?[page.match_id]:page.ids;
   if(!ids.length) throw new Error('No CS2 match links found. Open the team’s Stats/history page and load its matches, then choose Sync current page.');
@@ -58,6 +58,12 @@ async function syncPage(tabId,teamId='',commandId=null) {
     await delay(300);
   }
   if(!matches.length) throw new Error('FACEIT did not return match metadata. Sign in to FACEIT normally, then sync again.');
+  if(preview) {
+    const draft={team_id:teamId || page.team_id || '',matches};
+    await chrome.storage.local.set({sync_draft:draft});
+    await chrome.storage.local.remove('sync_reviewed_names');
+    return {draft};
+  }
   await local('/matches',{team_id:teamId || page.team_id || '',command_id:commandId,matches});
   await status('Synced '+matches.length+' matches'+(failed?' ('+failed+' unavailable)':'')+'. Open Import to browse them.');
 }
@@ -185,7 +191,19 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     if(message.type==='sync' && popup) {
       const [tab]=await chrome.tabs.query({active:true,currentWindow:true});
       if(!tab?.url?.startsWith('https://www.faceit.com/')) throw new Error('Open a FACEIT team Stats page or CS2 match room first.');
-      await syncPage(tab.id); return {ok:true};
+      return await syncPage(tab.id,'',null,true);
+    }
+    if(message.type==='confirm-sync' && popup) {
+      const {sync_draft:draft}=await chrome.storage.local.get('sync_draft');
+      if(!draft) throw new Error('Capture the current FACEIT page first.');
+      await local('/matches',{...draft,reviewed_names:message.reviewed_names || {}});
+      await chrome.storage.local.remove('sync_draft');
+      await chrome.storage.local.remove('sync_reviewed_names');
+      await status('Synced '+draft.matches.length+' matches with reviewed team names.');
+      return {ok:true};
+    }
+    if(message.type==='cancel-sync' && popup) {
+      await chrome.storage.local.remove('sync_draft');await chrome.storage.local.remove('sync_reviewed_names');return {ok:true};
     }
     throw new Error('Unsupported bridge message');
   };

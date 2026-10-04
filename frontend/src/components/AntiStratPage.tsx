@@ -24,6 +24,11 @@ import AppHeader from "./AppHeader";
 import AppBackdrop from "./AppBackdrop";
 import Select from "./Select";
 import { useReveal } from "../hooks/useReveal";
+import SearchableSelect from "./SearchableSelect";
+import TeamScoutExplorer from "./TeamScoutExplorer";
+import { buildScoutRounds, defaultScoutFilters, filterScoutTimeline, scoutTeamIds } from "../utils/teamScout";
+import type { ScoutFilters, ScoutSource } from "../utils/teamScout";
+import { roundAnchor, snapshotAt } from "../utils/replayState";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 const RADAR_PX = 1024;
@@ -186,8 +191,15 @@ export default function AntiStratPage() {
   const [loadProgress, setLoadProgress] = useState({ loaded: 0, total: 0 });
 
   // ── Loaded data ──
-  const [timelines, setTimelines] = useState<MatchTimeline[]>([]);
-  const [teamSidSets, setTeamSidSets] = useState<Set<string>[]>([]);
+  const [sources, setSources] = useState<ScoutSource[]>([]);
+  const [selectedDemos,setSelectedDemos] = useState<Set<string>>(new Set());
+  const [filters,setFilters] = useState<ScoutFilters>(defaultScoutFilters);
+  const [analysisErrors,setAnalysisErrors] = useState<string[]>([]);
+  const requestVersion=useRef(0);
+  const selectedSources=useMemo(()=>sources.filter(s=>selectedDemos.has(s.demoFile)),[sources,selectedDemos]);
+  const timelines=useMemo(()=>selectedSources.map(s=>filterScoutTimeline(s,filters)),[selectedSources,filters]);
+  const teamSidSets=useMemo(()=>selectedSources.map(s=>s.sids),[selectedSources]);
+  const scoutRounds=useMemo(()=>buildScoutRounds(selectedSources,filters),[selectedSources,filters]);
   const [radar, setRadar] = useState<RadarInfo | null>(null);
   const [callouts, setCallouts] = useState<Callout[]>([]);
 
@@ -196,7 +208,8 @@ export default function AntiStratPage() {
 
   // ── Load demos on mount ──
   useEffect(() => {
-    getMatchReplayDemos().then(setAllDemos).catch(() => {});
+    getMatchReplayDemos().then(setAllDemos).catch(()=>setAnalysisErrors(["Could not load the demo library. Refresh to retry."]));
+    return ()=>{requestVersion.current++;};
   }, []);
 
   // ── Unique maps ──
@@ -214,17 +227,20 @@ export default function AntiStratPage() {
   // ── Fetch match info when map changes ──
   useEffect(() => {
     if (!selectedMap || mapDemos.length === 0) return;
+    let active=true;const version=requestVersion.current;
     setPhase("info");
     const toFetch = mapDemos.filter((d) => !matchInfoCache[d.demo_file]);
     if (toFetch.length === 0) { setPhase("idle"); return; }
     Promise.allSettled(toFetch.map((d) => getMatchInfo(d.demo_file))).then((results) => {
-      const next = { ...matchInfoCache };
+      if(!active)return;
+      const next:Record<string,MatchInfoResponse> = {};
       for (const r of results) {
         if (r.status === "fulfilled") next[r.value.demo_file] = r.value;
       }
-      setMatchInfoCache(next);
-      setPhase("idle");
+      setMatchInfoCache(prev=>({...prev,...next}));
+      if(version===requestVersion.current)setPhase("idle");
     });
+    return ()=>{active=false;};
   }, [selectedMap, mapDemos.length]);
 
   // ── Discovered team names ──
@@ -252,39 +268,36 @@ export default function AntiStratPage() {
   // ── Analyze ──
   const handleAnalyze = useCallback(async () => {
     if (matchedDemos.length === 0) return;
+    const version=++requestVersion.current;
     setPhase("timelines");
-    setTimelines([]);
-    setTeamSidSets([]);
+    setSources([]);setAnalysisErrors([]);setFilters(defaultScoutFilters);
     setLoadProgress({ loaded: 0, total: matchedDemos.length });
 
     // Load radar + callouts
-    getRadarInfo(selectedMap).then(setRadar).catch(() => {});
-    getCallouts(selectedMap).then(setCallouts).catch(() => setCallouts([]));
+    setRadar(null);
+    getRadarInfo(selectedMap).then(value=>{if(version===requestVersion.current)setRadar(value);}).catch(()=>{if(version===requestVersion.current)setAnalysisErrors(e=>[...e,"Radar calibration is unavailable for this map."]);});
+    getCallouts(selectedMap).then(value=>{if(version===requestVersion.current)setCallouts(value);}).catch(() => {if(version===requestVersion.current)setCallouts([]);});
 
-    const loaded: MatchTimeline[] = [];
-    const sidSets: Set<string>[] = [];
+    const loaded:ScoutSource[]=[];
+    const errors:string[]=[];let attempted=0;
 
     for (const d of matchedDemos) {
       try {
         const tl = await getMatchReplayTimeline(d.demo_file);
-        loaded.push(tl);
+        if(version!==requestVersion.current)return;
 
         // Build steamid set for the team in this demo
         const mi = matchInfoCache[d.demo_file];
-        const teamPlayers = mi?.team1?.name.toLowerCase() === teamName.toLowerCase()
-          ? mi.team1.players : mi?.team2?.players ?? [];
-        const playerNames = new Set(teamPlayers.map((n) => n.toLowerCase()));
-        const sids = new Set<string>();
-        for (const p of tl.players) {
-          if (playerNames.has(p.name.toLowerCase())) sids.add(p.steamid);
-        }
-        sidSets.push(sids);
-      } catch { /* skip failed demo */ }
-      setLoadProgress({ loaded: loaded.length, total: matchedDemos.length });
+        const sids=scoutTeamIds(tl,mi,teamName);
+        if(!sids.size)throw new Error("The selected roster could not be identified in the demo.");
+        loaded.push({demoFile:d.demo_file,timeline:tl,info:mi,sids});
+      } catch(e:any) {errors.push(`${d.demo_file}: ${e?.response?.data?.detail ?? e.message ?? "Could not load demo"}`);}
+      if(version!==requestVersion.current)return;
+      setLoadProgress({ loaded: ++attempted, total: matchedDemos.length });
     }
 
-    setTimelines(loaded);
-    setTeamSidSets(sidSets);
+    setSources(loaded);setSelectedDemos(new Set(loaded.map(s=>s.demoFile)));
+    setAnalysisErrors(existing=>[...existing,...errors]);
     setPhase("done");
   }, [matchedDemos, selectedMap, teamName, matchInfoCache]);
 
@@ -294,12 +307,10 @@ export default function AntiStratPage() {
 
   // Helper: get team's side in a round for a specific timeline
   const getTeamSide = useCallback((tl: MatchTimeline, sids: Set<string>, roundStartTick: number): 2 | 3 => {
-    const refSid = [...sids][0];
-    if (!refSid) return 2;
-    const samples = tl.positions[refSid];
-    if (!samples) return 2;
-    const s = sampleAtTick(samples, roundStartTick + 320);
-    return (s?.tn === 3 ? 3 : 2) as 2 | 3;
+    const round=tl.rounds.find(r=>r.start_tick===roundStartTick);
+    const anchor=round?roundAnchor(round):roundStartTick+320;
+    let t=0,ct=0;for(const sid of sids){const side=snapshotAt(tl.positions[sid],anchor)?.tn;if(side===2)t++;if(side===3)ct++;}
+    return ct>t?3:2;
   }, []);
 
   // ── A. Site Hit Frequency ──
@@ -323,27 +334,7 @@ export default function AntiStratPage() {
           else if (plant.data.site.toUpperCase().includes("B")) B++;
           else unknown++;
         } else {
-          // No plant — use death positions to guess site
-          if (callouts.length > 0) {
-            const deaths = tl.events.filter(
-              (e) => e.type === "death" && e.tick >= r.start_tick && e.tick <= r.end_tick && sids.has(e.data.victim),
-            );
-            let aCount = 0, bCount = 0;
-            for (const d of deaths) {
-              const samples = tl.positions[d.data.victim];
-              if (!samples) continue;
-              const s = sampleAtTick(samples, d.tick);
-              if (!s) continue;
-              const callout = nearestCallout(s.x, s.y, callouts);
-              if (/\bA\b/i.test(callout) || /^A/i.test(callout)) aCount++;
-              else if (/\bB\b/i.test(callout) || /^B/i.test(callout)) bCount++;
-            }
-            if (aCount > bCount) A++;
-            else if (bCount > aCount) B++;
-            else unknown++;
-          } else {
-            unknown++;
-          }
+          unknown++;
         }
       }
     }
@@ -366,7 +357,9 @@ export default function AntiStratPage() {
           .filter((e) => e.type === "death" && e.tick >= r.start_tick && e.tick <= r.end_tick)
           .sort((a, b) => a.tick - b.tick)[0];
         if (!firstDeath) continue;
-        const secs = (firstDeath.tick - r.start_tick) / 64;
+        const plant=tl.events.find(e=>e.type==="bomb_plant" && e.tick>=r.start_tick && e.tick<=r.end_tick);
+        const anchor=filters.phase==="postplant" && plant ? plant.tick : roundAnchor(r);
+        const secs = (firstDeath.tick - anchor) / (tl.tick_rate || 64);
         if (secs < 0 || secs > 120) continue;
         times.push(secs);
         if (side === 2) tTimes.push(secs);
@@ -376,7 +369,7 @@ export default function AntiStratPage() {
 
     const avg = (arr: number[]) => arr.length > 0 ? arr.reduce((a, b) => a + b, 0) / arr.length : 0;
     return { avg: avg(times), tAvg: avg(tTimes), ctAvg: avg(ctTimes), times };
-  }, [timelines, teamSidSets, phase, getTeamSide]);
+  }, [timelines, teamSidSets, phase, getTeamSide, filters.phase]);
 
   // ── C. Utility Tendencies ──
   const utilityTendencies = useMemo(() => {
@@ -506,8 +499,8 @@ export default function AntiStratPage() {
         // Eco detection
         let teamEquip = 0;
         for (const sid of sids) {
-          const samples = tl.positions[sid] ?? [];
-          const s = sampleAtTick(samples, r.start_tick + 320);
+          const samples = selectedSources[i]?.timeline.positions[sid] ?? [];
+          const s = snapshotAt(samples, roundAnchor(r));
           if (s) teamEquip += (s.eq ?? 0);
         }
         if (classifyBuy(teamEquip).label === "Eco") {
@@ -518,7 +511,7 @@ export default function AntiStratPage() {
     }
 
     return { tWins, tTotal, ctWins, ctTotal, pistolWins, pistolTotal, ecoWins, ecoTotal };
-  }, [timelines, teamSidSets, phase, getTeamSide]);
+  }, [timelines, teamSidSets, phase, getTeamSide, selectedSources]);
 
   // ── F. Player Breakdown ──
   const playerStats = useMemo(() => {
@@ -691,7 +684,7 @@ export default function AntiStratPage() {
             <label className="text-[10px] text-scout-muted uppercase tracking-[0.12em] font-semibold">Map</label>
             <Select
               value={selectedMap}
-              onChange={(v) => { setSelectedMap(v); setTeamName(""); setPhase("idle"); setTimelines([]); }}
+              onChange={(v) => { requestVersion.current++;setSelectedMap(v); setTeamName(""); setPhase("idle"); setSources([]); }}
               className="w-full"
               placeholder="Select a map…"
               options={[
@@ -714,10 +707,9 @@ export default function AntiStratPage() {
                 <span className="text-[11px] text-scout-muted">Discovering teams...</span>
               </div>
             ) : (
-              <Select
+              <SearchableSelect ariaLabel="Scout team" allValue=""
                 value={teamName}
-                onChange={(v) => { setTeamName(v); setTimelines([]); setPhase("idle"); }}
-                className="w-full"
+                onChange={(v) => { requestVersion.current++;setTeamName(v); setSources([]); setPhase("idle"); }}
                 placeholder={selectedMap ? "Select a team…" : "Pick a map first"}
                 options={[
                   { value: "", label: selectedMap ? "Select a team…" : "Pick a map first", disabled: teamNames.length === 0 },
@@ -750,19 +742,20 @@ export default function AntiStratPage() {
               Demos ({matchedDemos.length})
             </p>
             <div className="space-y-1">
+              {phase==="done" && <div className="flex gap-3 text-xs mb-2"><button className="text-scout-accent" onClick={()=>setSelectedDemos(new Set(sources.map(s=>s.demoFile)))}>Select all</button><button className="text-scout-muted" onClick={()=>setSelectedDemos(new Set())}>Clear</button></div>}
               {matchedDemos.map((d) => {
                 const mi = matchInfoCache[d.demo_file];
-                const isLoaded = timelines.length > 0;
+                const isLoaded = sources.some(s=>s.demoFile===d.demo_file);
                 return (
-                  <div key={d.demo_file} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-scout-border/10 transition-colors">
-                    <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${isLoaded ? "bg-scout-green" : "bg-scout-muted/30"}`} />
+                  <label key={d.demo_file} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-scout-border/10 transition-colors cursor-pointer">
+                    <input type="checkbox" aria-label={`Include ${d.demo_file}`} disabled={!isLoaded || phase!=="done"} checked={isLoaded && selectedDemos.has(d.demo_file)} onChange={e=>setSelectedDemos(prev=>{const next=new Set(prev);if(e.target.checked)next.add(d.demo_file);else next.delete(d.demo_file);return next;})} className="accent-scout-accent"/>
                     <div className="min-w-0 flex-1">
                       <p className="text-[11px] text-gray-300 truncate">
                         {mi?.team1 && mi?.team2 ? `${mi.team1.name} vs ${mi.team2.name}` : d.demo_file}
                       </p>
                       {mi?.event && <p className="text-[9px] text-scout-muted truncate">{mi.event}</p>}
                     </div>
-                  </div>
+                  </label>
                 );
               })}
             </div>
@@ -772,6 +765,7 @@ export default function AntiStratPage() {
 
       {/* ── Main report ── */}
       <main className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+        {analysisErrors.length>0 && <div role="alert" className="m-6 hud-panel p-4 text-sm text-scout-red">{analysisErrors.map(e=><p key={e}>{e}</p>)}</div>}
         {phase === "idle" && timelines.length === 0 && (
           <AntiStratEmptyState
             hasMap={!!selectedMap}
@@ -804,6 +798,16 @@ export default function AntiStratPage() {
 
         {phase === "done" && (
           <div className="p-6 space-y-6 max-w-6xl mx-auto">
+            <section className="hud-panel p-4 space-y-3" aria-label="Scouting scenario filters">
+              <div className="flex flex-wrap items-end gap-4">
+                <label className="text-xs text-scout-muted">Side<SearchableSelect ariaLabel="Scout side" value={filters.side} allValue="all" onChange={v=>setFilters(f=>({...f,side:v as ScoutFilters["side"]}))} options={[{value:"all",label:"Both sides"},{value:"T",label:"T · Attacking"},{value:"CT",label:"CT · Defending / retaking"}]}/></label>
+                <label className="text-xs text-scout-muted">Scenario<SearchableSelect ariaLabel="Scout scenario" noun="Scenarios" placeholder="Search scenarios…" value={filters.phase} allValue="all" onChange={v=>setFilters(f=>({...f,phase:v as ScoutFilters["phase"],site:v==="postplant" && f.site==="none"?"all":f.site}))} options={[{value:"all",label:"All round phases"},{value:"postplant",label:"After plant only"}]}/></label>
+                <label className="text-xs text-scout-muted">{filters.side==="T"?"Site hit (planted site)":"Bomb planted at"}<SearchableSelect ariaLabel="Scout bombsite" value={filters.site} allValue="all" onChange={v=>setFilters(f=>({...f,site:v as ScoutFilters["site"]}))} options={[{value:"all",label:"All sites"},{value:"A",label:"A site"},{value:"B",label:"B site"},...(filters.phase==="all"?[{value:"none",label:"No plant"}]:[])]}/></label>
+                <button className="hud-btn text-xs" onClick={()=>{setFilters(defaultScoutFilters);setSelectedDemos(new Set(sources.map(s=>s.demoFile)));}}>Reset filters</button>
+              </div>
+              <p className="text-xs text-scout-muted">{scoutRounds.length} matching rounds in {selectedSources.length} selected matches. Site filters use the actual bomb plant, not a guessed attack. CT + After plant shows retake/defuse setups; T + After plant shows post-plant holds.</p>
+            </section>
+            {radar && <TeamScoutExplorer rounds={scoutRounds} radar={radar} teamName={teamName} postplant={filters.phase==="postplant"}/>}
             {/* ═══ Summary Banner ═══ */}
             <div className="hud-panel hud-corner p-5">
               <div className="flex items-center justify-between">
@@ -882,7 +886,7 @@ export default function AntiStratPage() {
 
             {/* ═══ First Blood Timing ═══ */}
             <div className="hud-panel p-5">
-              <SectionHeader num="03" title="First Blood Timing" sub="Average time to first kill per round" />
+              <SectionHeader num="03" title={filters.phase==="postplant"?"First Post-Plant Duel":"First Blood Timing"} sub={filters.phase==="postplant"?"Seconds from plant to first kill in the selected phase":"Average live-round seconds to first kill"} />
               <div className="grid grid-cols-3 gap-4">
                 <div className="hud-panel p-3 text-center">
                   <p className="text-2xl font-bold font-mono text-white">{firstKillTiming.avg.toFixed(1)}<span className="text-sm text-scout-muted">s</span></p>

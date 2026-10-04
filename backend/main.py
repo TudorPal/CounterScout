@@ -929,13 +929,24 @@ def _ensure_local_roster(
 
 def _load_roster_for_demo(demo_file: str) -> Optional[dict]:
     """Prefer the authoritative HLTV sidecar, then the local-demo sidecar."""
+    def with_names(roster):
+        path = settings.demo_dir / f"{demo_file}.teams.json"
+        if path.exists():
+            try:
+                names = json.loads(path.read_text(encoding="utf-8"))
+                for slot in ("team1", "team2"):
+                    if roster.get(slot) and isinstance(names.get(slot), str) and names[slot].strip():
+                        roster[slot]["name"] = names[slot]
+            except (OSError, ValueError, TypeError, AttributeError) as exc:
+                logger.warning("Could not load team-name overrides for %s: %s", demo_file, exc)
+        return roster
     hltv_roster = _load_roster(_parse_match_id(Path(demo_file).stem))
     if hltv_roster is not None:
-        return hltv_roster
+        return with_names(hltv_roster)
     path = _local_roster_path(demo_file)
     if path.exists():
         try:
-            return json.loads(path.read_text(encoding="utf-8"))
+            return with_names(json.loads(path.read_text(encoding="utf-8")))
         except Exception as exc:
             logger.warning("Could not read local roster %s: %s", path.name, exc)
     return None
@@ -998,13 +1009,13 @@ def _rosters_match(reference: set[str], candidate: set[str]) -> bool:
     return required_overlap > 0 and len(reference & candidate) >= required_overlap
 
 
-@app.put("/api/match-info/{demo_file}/teams", summary="Name the two teams in a local demo")
+@app.put("/api/match-info/{demo_file}/teams", summary="Name the two teams in a demo")
 async def update_local_demo_team_names(demo_file: str, payload: LocalTeamNamesRequest):
     """Persist names against the displayed roster groups, not T/CT slots.
 
     This makes manual naming unambiguous: the frontend shows each five-player
-    roster next to its input. HLTV sidecars remain read-only because their
-    names are sourced from the match page.
+    roster next to its input. HLTV names get a demo-specific override so a
+    change never rewrites the shared match sidecar for sibling maps.
     """
     name = _safe_demo_name(demo_file)
     roster = _load_roster_for_demo(name)
@@ -1012,8 +1023,8 @@ async def update_local_demo_team_names(demo_file: str, payload: LocalTeamNamesRe
         cached = _load_cached_timeline(name)
         if cached is not None:
             roster = _ensure_local_roster(name, cached)
-    if not roster or roster.get("source") != "local-demo":
-        raise HTTPException(status_code=409, detail="Only locally-derived demo rosters can be renamed")
+    if not roster or not roster.get("team1") or not roster.get("team2"):
+        raise HTTPException(status_code=409, detail="Parse the demo first to identify both rosters")
 
     team1_name = payload.team1_name.strip()[:80]
     team2_name = payload.team2_name.strip()[:80]
@@ -1025,7 +1036,11 @@ async def update_local_demo_team_names(demo_file: str, payload: LocalTeamNamesRe
     roster["team1"]["name"] = team1_name
     roster["team2"]["name"] = team2_name
     try:
-        _local_roster_path(name).write_text(json.dumps(roster, indent=2) + "\n", encoding="utf-8")
+        if roster.get("source") == "local-demo":
+            _local_roster_path(name).write_text(json.dumps(roster, indent=2) + "\n", encoding="utf-8")
+        else:
+            (settings.demo_dir / f"{name}.teams.json").write_text(
+                json.dumps({"team1": team1_name, "team2": team2_name}, indent=2) + "\n", encoding="utf-8")
     except OSError as exc:
         raise HTTPException(status_code=500, detail=f"Could not save team names: {exc}") from exc
     return await get_match_info(name)
@@ -1714,6 +1729,7 @@ async def upload_demo(
     cache_path = _TIMELINE_CACHE_DIR / f"{dest.name}.json"
     cache_path.unlink(missing_ok=True)
     _local_roster_path(dest.name).unlink(missing_ok=True)
+    (settings.demo_dir / f"{dest.name}.teams.json").unlink(missing_ok=True)
     try:
         from backend.ingestion.demo_parser import extract_match_timeline
         bundle = await asyncio.to_thread(extract_match_timeline, dest)
@@ -1828,6 +1844,7 @@ async def delete_demo(demo_file: str):
     # Manual uploads own a filename-specific roster; HLTV sidecars are keyed
     # only by match id and are intentionally left intact for sibling maps.
     _local_roster_path(name).unlink(missing_ok=True)
+    (settings.demo_dir / f"{name}.teams.json").unlink(missing_ok=True)
     return {"deleted": name}
 
 

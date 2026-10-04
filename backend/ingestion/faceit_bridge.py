@@ -30,6 +30,27 @@ LOCAL_ORIGINS = {"http://localhost:5173", "http://127.0.0.1:5173", "http://local
 BRIDGE_VERSION = "0.2.2"
 
 
+def apply_reviewed_names(match: dict, previous: dict | None) -> dict:
+    """Keep confirmed aliases attached to their roster, including slot swaps."""
+    overrides = {}
+    for old_slot, alias in (previous or {}).get("name_overrides", {}).items():
+        old = previous.get(old_slot) or {}
+        for slot in ("team1", "team2"):
+            team = match[slot]
+            if old.get("id") and team.get("id"):
+                same = old["id"] == team["id"]
+            else:
+                members = set(old.get("steamids", [])) or {n.casefold() for n in old.get("players", [])}
+                candidates = set(team.get("steamids", [])) or {n.casefold() for n in team.get("players", [])}
+                same = len(members & candidates) >= 2
+            if same:
+                team["name"] = alias
+                overrides[slot] = alias
+    if overrides:
+        match["name_overrides"] = overrides
+    return match
+
+
 def supports_automation(version: str | None) -> bool:
     return bool(version and re.fullmatch(r"\d+\.\d+\.\d+", version)
                 and tuple(map(int, version.split("."))) >= (0, 2, 2))
@@ -206,6 +227,7 @@ class SyncMatches(BaseModel):
     command_id: str | None = None
     matches: list[dict] = Field(max_length=100)
     error: str | None = Field(default=None, max_length=500)
+    reviewed_names: dict[str, dict[str, str]] = Field(default_factory=dict, max_length=100)
 
 
 class ImportDownload(BaseModel):
@@ -418,6 +440,21 @@ def install_faceit_bridge(app, upload_demo, store=None):
                     continue
                 if req.team_id and req.team_id not in (match["team1"]["id"], match["team2"]["id"]):
                     continue
+                old = db.execute("SELECT data FROM matches WHERE id=?", (match["match_id"],)).fetchone()
+                match = apply_reviewed_names(match, json.loads(old["data"]) if old else None)
+                overrides = dict(match.get("name_overrides", {}))
+                for faction, alias in req.reviewed_names.get(match["match_id"], {}).items():
+                    if faction not in ("faction1", "faction2"):
+                        raise HTTPException(422, "Choose a valid roster to rename")
+                    alias = alias.strip()
+                    if not alias or len(alias) > 80:
+                        raise HTTPException(422, "Team names must contain 1–80 characters")
+                    slot = "team1" if faction == "faction1" else "team2"
+                    match[slot]["name"] = overrides[slot] = alias
+                if overrides:
+                    if match["team1"]["name"].casefold() == match["team2"]["name"].casefold():
+                        raise HTTPException(422, "The two team names must be different")
+                    match["name_overrides"] = overrides
                 db.execute("INSERT OR REPLACE INTO matches VALUES (?,?,?,?)", (match["match_id"], req.team_id, json.dumps(match), time.time()))
                 count += 1
             if req.command_id:
@@ -447,6 +484,9 @@ def install_faceit_bridge(app, upload_demo, store=None):
                 # not the match ID or download filename, to retain every map.
                 name = f"faceit_{req.match_id}_{digest[:20]}.dem"
                 metadata = normalize_match(req.metadata)
+                with store.connect() as db:
+                    reviewed = db.execute("SELECT data FROM matches WHERE id=?", (req.match_id,)).fetchone()
+                metadata = apply_reviewed_names(metadata, json.loads(reviewed["data"]) if reviewed else None)
                 if (settings.demo_dir / name).exists():
                     with store.connect() as db:
                         completed = db.execute("SELECT id FROM imports WHERE demo_file=? AND state='done' LIMIT 1", (name,)).fetchone()
