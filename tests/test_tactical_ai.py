@@ -19,7 +19,12 @@ def valid_report(evidence,digest):
     return {'overview':'Observed openings; verify routes.', 'limitations':['Intent is uncertain.'],
             'sections':[{'side':g['side'],'buy':g['buy'],'plan':'Opening routes in cited rounds.',
                          'utility':'Observed smoke and flash areas.','possible_lurks':'Possible separation only.',
-                         'confidence':'low','round_refs':[r['id'] for r in g['examples']][:1]} for g in digest['groups']]}
+                         'confidence':'low','round_refs':[r['id'] for r in g['examples']][:1],
+                         'variations':[{'name':'Observed plan','opening':'Four grouped; one separate.',
+                                        'timing':'Moves sampled at 10-35s.','utility':'Supporting smoke.',
+                                        'roles':'Possible separation; intent unknown.','round_refs':[g['examples'][0]['id']]}] if g['examples'] else [],
+                         'watch_for':['Sampled positions are approximate.'],
+                         'counterplay':['Consider checking the separated route; hypothesis only.']} for g in digest['groups']]}
 
 
 class TacticalAiTests(unittest.TestCase):
@@ -44,6 +49,26 @@ class TacticalAiTests(unittest.TestCase):
         with patch.object(ai.settings,'team_ai_provider','openrouter'),patch.object(ai.settings,'openrouter_model','paid/model'):
             with self.assertRaises(HTTPException) as error:ai.provider_config()
             self.assertEqual(error.exception.status_code,422)
+
+    def test_variation_citations_must_belong_to_both_group_and_section(self):
+        report=valid_report(self.evidence,self.digest)
+        for wrong in ['invented.dem:R99',report['sections'][1]['round_refs'][0]]:
+            report['sections'][0]['variations'][0]['round_refs']=[wrong]
+            with self.assertRaises(HTTPException):ai.validate_report(json.dumps(report),self.evidence,self.digest)
+        report=valid_report(self.evidence,self.digest)
+        section=next(s for s,g in zip(report['sections'],self.digest['groups']) if len(g['examples'])>1)
+        group=next(g for g in self.digest['groups'] if (g['side'],g['buy'])==(section['side'],section['buy']))
+        section['variations'][0]['round_refs']=[group['examples'][1]['id']]
+        with self.assertRaises(HTTPException):ai.validate_report(json.dumps(report),self.evidence,self.digest)
+
+    def test_prompt_requests_detailed_but_scan_friendly_notes_and_hypotheses(self):
+        provider=AsyncMock(return_value=json.dumps(valid_report(self.evidence,self.digest)))
+        with patch.object(ai,'complete',provider):
+            asyncio.run(ai.generate_report(self.evidence))
+        system=provider.call_args.args[0][0]['content']
+        for instruction in ('NOT an essay','STYLE ONLY','COACHING HYPOTHESES','Do not label rounds anti-eco','15-30 words'):
+            self.assertIn(instruction,system)
+        self.assertIn('TacticalVariation',provider.call_args.kwargs['schema']['$defs'])
 
     def test_groq_has_no_key_fallback_and_configuration_never_returns_secrets(self):
         with patch.object(ai.settings,'team_ai_provider','groq'),patch.object(ai.settings,'groq_api_key',''),patch.object(ai.settings,'anthropic_api_key','private-paid-key'):

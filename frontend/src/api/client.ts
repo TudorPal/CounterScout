@@ -11,7 +11,7 @@ export type TeamAnalysisRequest = {team_name:string;map_name:string;demo_files:s
 export type TeamBuy = "pistol"|"eco"|"force-buy"|"full-buy"|"mixed/unknown";
 export interface TeamTacticalRound {
   id:string;demo_file:string;round:number;side:"T"|"CT";buy:TeamBuy;active_players:number;won:boolean;planted_site:string;plant_seconds:number|null;equipment:number;
-  routes:Array<{player:string;samples:Array<{seconds:number;location:string}>}>;
+  routes:Array<{player:string;samples:Array<{seconds:number;location:string;phase?:string}>}>;
   possible_lurks:Array<{player:string;separated_at_seconds:number[]}>;
   utility:Array<{type:string;player:string;seconds:number;from:string;to:string;landing:number[];phase:string}>;
 }
@@ -24,7 +24,9 @@ export interface TeamTacticalEvidence {
 }
 export interface TeamTacticalReport {
   overview:string;limitations:string[];
-  sections:Array<{side:"T"|"CT";buy:TeamBuy;plan:string;utility:string;possible_lurks:string;confidence:"low"|"medium"|"high";round_refs:string[]}>;
+  sections:Array<{side:"T"|"CT";buy:TeamBuy;plan:string;utility:string;possible_lurks:string;confidence:"low"|"medium"|"high";round_refs:string[];
+    variations:Array<{name:string;opening:string;timing:string;utility:string;roles:string;round_refs:string[]}>;
+    watch_for:string[];counterplay:string[]}>;
 }
 export interface TeamAiConfiguration {provider:string;model:string;configured:boolean;paid_fallback:boolean}
 export const getTeamAiConfiguration = async () => (await api.get<TeamAiConfiguration>("/ai/configuration")).data;

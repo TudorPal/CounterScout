@@ -11,7 +11,17 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from backend.config import settings
 from backend.analysis.team_tactics import prompt_evidence
 
-PROMPT_VERSION = 1
+PROMPT_VERSION = 3
+
+
+class TacticalVariation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    name: str = Field(max_length=100)
+    opening: str = Field(max_length=700)
+    timing: str = Field(max_length=700)
+    utility: str = Field(max_length=700)
+    roles: str = Field(max_length=600)
+    round_refs: list[str] = Field(min_length=1, max_length=4)
 
 
 class TacticalSection(BaseModel):
@@ -23,6 +33,9 @@ class TacticalSection(BaseModel):
     possible_lurks: str = Field(max_length=1000)
     confidence: Literal["low", "medium", "high"]
     round_refs: list[str] = Field(max_length=4)
+    variations: list[TacticalVariation] = Field(max_length=3)
+    watch_for: list[str] = Field(max_length=3)
+    counterplay: list[str] = Field(max_length=2)
 
 
 class TacticalReport(BaseModel):
@@ -114,6 +127,9 @@ def validate_report(content, evidence, digest):
             refs = allowed[(section.side, section.buy)]
             if not set(section.round_refs) <= refs or refs and not section.round_refs:
                 raise ValueError("Invalid or missing evidence citation")
+            for variation in section.variations:
+                if not set(variation.round_refs) <= refs or not set(variation.round_refs) <= set(section.round_refs):
+                    raise ValueError("Invalid variation evidence citation")
         return report.model_dump()
     except (ValidationError, ValueError):
         raise HTTPException(502, "AI output failed the category/citation checks. Evidence is available, but no unverified report was saved.") from None
@@ -132,11 +148,29 @@ async def generate_report(evidence):
         "Cite example ids in round_refs for each section; if no examples, use [] and explicitly state insufficient route evidence. "
         "Cover pistol, eco, force-buy, full-buy and mixed/unknown when present, separately for T and CT. "
         "Summarize site tendencies and common smoke/flash landing areas in overview and utility. "
-        "Keep each plan to 2 short sentences, utility and possible_lurks to 1-2 short sentences, overview to 3 sentences. "
+        "Write scan-friendly coach's scouting notes, NOT an essay. English. Short concrete bullets/fields, no filler, no motivational language. "
+        "For each side/buy, plan is a one-sentence baseline; utility/possible_lurks are short category summaries. "
+        "Add variations: one for each genuinely different observed setup, 1-2 normally, never manufacture variations to fill space. "
+        "Each variation has a short name (e.g. 'Pistol A split — R1'), opening (player counts + named positions), "
+        "timing (observed pushes, moves, rotations or post-plant holds), utility (who throws what, from/to, when, alongside movements), "
+        "roles (anchors/support or POSSIBLE lurker when evidenced), and round_refs. Each field is a compact scouting-note sentence, not a paragraph. "
+        "Use exact elapsed seconds after freeze, not a fabricated 1:44 round clock. Count only players observed in the same sampled frame. "
+        "Example route_detail says sampled, first/last-only or opening-only; do not describe missing intermediate moves as observed. "
+        "If names/roles, boosts, sightlines, anti-flash posture or smoke responses are not observed, explicitly mark unknown; do not guess from map lore. "
+        "Examples illustrate STYLE ONLY, not match facts: CT pistol opening '2 near short, 2 near B, 1 near mid'; "
+        "T pistol opening '4 near long, one separate near top mid'; utility 'Support throws smoke near mid at 6s and two flashes before the advance'; "
+        "CT timing 'Two sampled players move from B toward CT between 20-35s; reason unknown'. "
+        "Treat rounds with differing routes as 'Plan 1/Plan 2' with citations, rather than merging incompatible positions into one default. "
+        "watch_for contains up to 3 evidence-based cues/tendencies or important missing coverage. "
+        "counterplay contains up to 2 cautious COACHING HYPOTHESES based on observed openings; never claim they are proven successful or observed enemy actions. "
+        "Do not label rounds anti-eco: opposing economy is not supplied. You may say that classification is unavailable. "
+        "Do not invent conditional statements such as 'if B doors is smoked they rotate' unless the supplied evidence demonstrates that cause. "
+        "Limit each variation field to about 15-30 words. Prefer one well-supported variation to verbose repetition. Overview: 2 short sentences. "
         "Do not infer coordinated flashes/smokes unless their timing and routes appear together in an example. "
-        "No markdown. Output fields: overview (string), sections (array of side, buy, plan, utility, possible_lurks, confidence, round_refs), limitations (array of strings)."
+        "No markdown. Output fields: overview, sections (side, buy, plan, utility, possible_lurks, confidence, round_refs, variations, watch_for, counterplay), limitations. "
+        "Use [] for variations when no route examples exist; each variation's cited ids must also appear in the section's round_refs."
     )
     if provider_config()[0] == "openrouter":
         system += " JSON schema: " + json.dumps(report_schema(), separators=(",", ":"))
-    content = await complete([{"role": "system", "content": system}, {"role": "user", "content": json.dumps(digest, ensure_ascii=False, separators=(",", ":"))}], schema=report_schema())
+    content = await complete([{"role": "system", "content": system}, {"role": "user", "content": json.dumps(digest, ensure_ascii=False, separators=(",", ":"))}], max_tokens=3800, schema=report_schema())
     return validate_report(content, evidence, digest)

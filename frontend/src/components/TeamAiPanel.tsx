@@ -6,6 +6,7 @@ import type {TeamAiConfiguration,TeamTacticalEvidence,TeamTacticalReport,TeamAna
 const label=(buy:string)=>buy==='mixed/unknown'?'Mixed / unknown':buy.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');
 const roundLink=(r:TeamTacticalRound)=>`/replay/${encodeURIComponent(r.demo_file)}/insights?round=${r.round}`;
 
+const countLabel=(n:number,label:string)=>`${n} ${label}${n===1?'':'s'}`;
 /** On-demand only: switching maps/teams never submits a provider request. */
 export default function TeamAiPanel({request}:{request:TeamAnalysisRequest}) {
   const [configuration,setConfiguration]=useState<TeamAiConfiguration|null>(null);
@@ -55,18 +56,28 @@ export default function TeamAiPanel({request}:{request:TeamAnalysisRequest}) {
         <div className="flex gap-1" aria-label="Team analysis side">{(['all','T','CT'] as const).map(v=><button key={v} className={side===v?'hud-btn-primary text-xs':'hud-btn text-xs'} aria-pressed={side===v} onClick={()=>setSide(v)}>{v==='all'?'Both sides':v}</button>)}</div>
       </div>
       {result && <div className="rounded-lg border border-scout-accent/20 p-4"><p className="text-xs uppercase tracking-wider text-scout-accent mb-2">AI interpretation · verify with the cited rounds</p><p className="text-sm leading-relaxed text-gray-200">{result.report.overview}</p></div>}
-      <div className="grid gap-4 xl:grid-cols-2">{evidence.groups.filter(g=>side==='all'||g.side===side).map(g=>{
+      <div className="grid gap-4">{evidence.groups.filter(g=>side==='all'||g.side===side).map(g=>{
         const interpretation=result?.report.sections.find(s=>s.side===g.side && s.buy===g.buy);
         const rounds=evidence.rounds.filter(r=>g.round_refs.includes(r.id));
         return <article key={`${g.side}-${g.buy}`} className="rounded-xl border border-white/10 p-4 space-y-3">
-          <div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold text-white"><span style={{color:g.side==='T'?'#DCBF6E':'#5B9BD5'}}>{g.side}</span> · {label(g.buy)}</h3><span className="text-xs text-scout-muted">{g.rounds} rounds · {g.wins} wins{interpretation?` · ${interpretation.confidence} confidence`:''}</span></div>
+          <div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold text-white"><span style={{color:g.side==='T'?'#DCBF6E':'#5B9BD5'}}>{g.side}</span> · {label(g.buy)}</h3><span className="text-xs text-scout-muted">{countLabel(g.rounds,'round')} · {countLabel(g.wins,'win')}{interpretation?` · ${interpretation.confidence} confidence`:''}</span></div>
           <p className="text-xs text-scout-muted">Observed plants: {['A','B','none','unknown'].filter(s=>g.planted_sites[s]).map(s=>`${s==='none'?'No plant':s==='unknown'?'Unknown site':`${s} site`}: ${g.planted_sites[s]}`).join(' · ') || 'None'}. Buy type is an estimate.</p>
-          {interpretation && <div className="text-sm text-gray-200 leading-relaxed space-y-2"><p>{interpretation.plan}</p><p><span className="text-scout-accent">Utility: </span>{interpretation.utility}</p><p><span className="text-scout-accent">{g.side==='T'?'Possible lurks':'Defensive separation'}: </span>{interpretation.possible_lurks}</p>
-            <div className="flex flex-wrap gap-2">{interpretation.round_refs.map(ref=>{const r=evidence.rounds.find(r=>r.id===ref);return r?<Link key={ref} to={roundLink(r)} className="text-xs text-scout-accent underline">Demo {request.demo_files.indexOf(r.demo_file)+1} · R{r.round} ↗</Link>:null;})}</div></div>}
+          {interpretation && <div className="text-sm text-gray-200 space-y-3">
+            <p className="font-medium">{interpretation.plan}</p>
+            <div className={`grid gap-3 ${interpretation.variations.length>1?'lg:grid-cols-2':''}`}>{interpretation.variations.map((v,i)=><section key={i} aria-label={v.name} className="rounded-lg bg-white/[0.03] border border-white/5 p-3">
+              <h4 className="font-semibold text-scout-accent mb-3">{v.name}</h4>
+              <dl className={`grid gap-3 ${interpretation.variations.length===1?'sm:grid-cols-2':''}`}>{[['Setup',v.opening],['Timing / rotations',v.timing],['Utility support',v.utility],['Roles / possible lurks',v.roles]].map(([title,text])=><div key={title}><dt className="text-xs font-semibold text-scout-muted mb-1">{title}</dt><dd className="leading-snug">{text}</dd></div>)}</dl>
+              <div className="flex flex-wrap gap-2 mt-3">{v.round_refs.map(ref=>{const r=evidence.rounds.find(r=>r.id===ref);return r?<Link key={ref} to={roundLink(r)} className="text-xs text-scout-accent underline">Demo {request.demo_files.indexOf(r.demo_file)+1} · R{r.round} ↗</Link>:null;})}</div>
+            </section>)}</div>
+            <dl className="space-y-2"><div><dt className="inline font-medium text-scout-muted">Common utility: </dt><dd className="inline">{interpretation.utility}</dd></div><div><dt className="inline font-medium text-scout-muted">{g.side==='T'?'Possible lurks':'Defensive separation'}: </dt><dd className="inline">{interpretation.possible_lurks}</dd></div></dl>
+            {interpretation.watch_for.length>0 && <div><h4 className="text-xs font-semibold uppercase text-scout-accent mb-1">Watch for</h4><ul className="list-disc pl-4 space-y-1">{interpretation.watch_for.map((text,i)=><li key={i}>{text}</li>)}</ul></div>}
+            {interpretation.counterplay.length>0 && <div className="border-l-2 border-scout-yellow/50 pl-3"><h4 className="text-xs font-semibold uppercase text-scout-yellow mb-1">Counterplay · coaching hypotheses</h4><ul className="list-disc pl-4 space-y-1">{interpretation.counterplay.map((text,i)=><li key={i}>{text}</li>)}</ul></div>}
+            <div className="flex flex-wrap gap-2"><span className="text-xs text-scout-muted">Category evidence:</span>{interpretation.round_refs.map(ref=>{const r=evidence.rounds.find(r=>r.id===ref);return r?<Link key={ref} to={roundLink(r)} className="text-xs text-scout-accent underline">Demo {request.demo_files.indexOf(r.demo_file)+1} · R{r.round} ↗</Link>:null;})}</div>
+          </div>}
           <div><h4 className="text-xs uppercase text-scout-muted mb-2">Observed common smoke / flash areas</h4>{g.common_utility.length ? <ul className="space-y-1 text-xs text-gray-200">{g.common_utility.map((u,i)=><li key={i}>{u.type} → {u.location} <span className="text-scout-muted">· {u.throws} throws in {u.rounds}/{g.rounds} rounds</span></li>)}</ul>:<p className="text-xs text-scout-muted">No smoke/flash throws recorded.</p>}</div>
           <details><summary className="text-xs text-scout-accent cursor-pointer">Check round evidence ({rounds.length})</summary><div className="space-y-3 mt-3 max-h-96 overflow-y-auto">{rounds.map(r=><div key={r.id} className="border-t border-white/10 pt-3 text-xs text-gray-200 space-y-2">
             <div className="flex justify-between gap-2"><Link className="text-scout-accent underline" to={roundLink(r)}>Demo {request.demo_files.indexOf(r.demo_file)+1} · Round {r.round} ↗</Link><span>{r.active_players} present · {r.won?'Won':'Lost'} · ${r.equipment.toLocaleString()} equipment</span></div>
-            {r.routes.map(route=><p key={route.player}><span className="font-semibold">{route.player}</span>: {route.samples.length?route.samples.map(s=>`${s.seconds}s ${s.location}`).join(' → '):'No early route samples'}</p>)}
+            {r.routes.map(route=><p key={route.player}><span className="font-semibold">{route.player}</span>: {route.samples.length?route.samples.map(s=>`${s.seconds}s ${s.location}${s.phase==='postplant'?' (post-plant)':''}`).join(' → '):'No route samples'}</p>)}
             {r.possible_lurks.map(l=><p key={l.player} className="text-scout-yellow">Possible lurk: {l.player} separated at {l.separated_at_seconds.join(', ')}s (intent unconfirmed).</p>)}
             {r.utility.map((u,i)=><p key={i}>{u.seconds}s · {u.player} · {u.type}: {u.from} → {u.to} ({u.phase})</p>)}
           </div>)}</div></details>

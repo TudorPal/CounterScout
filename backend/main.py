@@ -148,13 +148,13 @@ _rcon = RCONBridge()
 # LLM helper — uses Anthropic if configured, otherwise OpenRouter free models
 # ---------------------------------------------------------------------------
 
-async def _llm_complete(prompt: str, max_tokens: int = 1500) -> str:
+async def _llm_complete(prompt: str, max_tokens: int = 1500, schema=None) -> str:
     """Send a prompt to the configured LLM and return the text response."""
 
     # The same free-tier key also enables the existing match recap and lineups.
-    if settings.groq_api_key and settings.team_ai_provider == "groq":
+    if schema is not None or settings.groq_api_key and settings.team_ai_provider == "groq":
         from backend.analysis.tactical_ai import complete
-        return await complete([{"role": "user", "content": prompt}], max_tokens=max_tokens)
+        return await complete([{"role": "user", "content": prompt}], max_tokens=max_tokens, schema=schema)
 
     # Try Anthropic first (if key is set)
     if settings.anthropic_api_key:
@@ -682,6 +682,7 @@ _TIMELINE_LOCKS: dict[str, asyncio.Lock] = {}
 _INSIGHTS_CACHE: dict[str, MatchInsightsResponse] = {}
 
 
+_INSIGHTS_LOCKS: dict[str, asyncio.Lock] = {}
 def _safe_demo_name(demo_file: str) -> str:
     """
     Validate that `demo_file` is a plain filename with no path components,
@@ -1967,154 +1968,50 @@ async def _serve_match_replay_timeline(name: str):
 
 
 def _build_match_digest(name: str, bundle: dict) -> str:
-    """
-    Collapse a full timeline into a compact text summary for the Claude
-    prompt. Sending the raw JSON would cost ~800 KB of numbers Claude can't
-    reason about — a few KB of round-by-round prose is plenty.
-    """
-    map_name = bundle.get("map_name", "unknown")
-    rounds = bundle.get("rounds", []) or []
-    events = bundle.get("events", []) or []
-    players = bundle.get("players", []) or []
-    grenades = bundle.get("grenades", []) or []
-
-    sid_to_name = {p["steamid"]: p.get("name", p["steamid"]) for p in players}
-    sid_to_team = {p["steamid"]: p.get("team_num", 0) for p in players}
-
-    # Per-player kill / death tallies and per-round narrative.
-    kills: dict[str, int] = {}
-    deaths: dict[str, int] = {}
-    by_tick = sorted(events, key=lambda e: e.get("tick", 0))
-
-    round_lines: list[str] = []
-    t_score = 0
-    ct_score = 0
-    for r in rounds:
-        start, end = r.get("start_tick", 0), r.get("end_tick", 0)
-        winner = r.get("winner") or "?"
-        if winner == "T":
-            t_score += 1
-        elif winner == "CT":
-            ct_score += 1
-
-        round_kills: dict[str, int] = {}
-        nades_in_round = 0
-        bomb = ""
-        for e in by_tick:
-            tick = e.get("tick", 0)
-            if tick < start or tick > end:
-                continue
-            if e["type"] == "death":
-                a = e["data"].get("attacker", "")
-                v = e["data"].get("victim", "")
-                if a and a != v:
-                    kills[a] = kills.get(a, 0) + 1
-                    round_kills[a] = round_kills.get(a, 0) + 1
-                if v:
-                    deaths[v] = deaths.get(v, 0) + 1
-            elif e["type"] == "bomb_plant":
-                bomb = "planted"
-            elif e["type"] == "bomb_defuse":
-                bomb = "defused"
-        for g in grenades:
-            pts = g.get("points") or []
-            if pts and start <= pts[0][0] <= end:
-                nades_in_round += 1
-
-        top_in_round = sorted(round_kills.items(), key=lambda kv: -kv[1])[:2]
-        top_str = ", ".join(
-            f"{sid_to_name.get(sid, sid)}({n})" for sid, n in top_in_round
-        ) or "—"
-        round_lines.append(
-            f"Round {r['num']}: {winner} win"
-            + (f" ({bomb})" if bomb else "")
-            + f". Top: {top_str}. Nades: {nades_in_round}."
-        )
-
-    # Top fraggers across the whole match.
-    top_fraggers = sorted(kills.items(), key=lambda kv: -kv[1])[:5]
-    fragger_lines = [
-        f"  {sid_to_name.get(sid, sid)} ({'CT' if sid_to_team.get(sid)==3 else 'T'}): "
-        f"{n}K / {deaths.get(sid, 0)}D"
-        for sid, n in top_fraggers
-    ]
-
-    # Roster split by team.
-    t_side = [p["name"] for p in players if p.get("team_num") == 2]
-    ct_side = [p["name"] for p in players if p.get("team_num") == 3]
-
-    digest = [
-        f"Match: {name}",
-        f"Map: {map_name}",
-        f"Final score: T {t_score} – {ct_score} CT",
-        f"T side roster: {', '.join(t_side) or '—'}",
-        f"CT side roster: {', '.join(ct_side) or '—'}",
-        "",
-        "Top fraggers:",
-        *fragger_lines,
-        "",
-        "Round by round:",
-        *round_lines,
-    ]
-    return "\n".join(digest)
+    from backend.analysis.match_snapshot import build_digest
+    return build_digest(name, bundle, _load_roster_for_demo(name) or {})
 
 
 @app.post(
     "/api/match-replay/{demo_file}/insights",
     response_model=MatchInsightsResponse,
-    summary="Claude-generated narrative recap for a match",
+    summary="AI-generated scan-friendly match snapshot",
 )
 async def get_match_replay_insights(demo_file: str):
     name = _safe_demo_name(demo_file)
-    if name in _INSIGHTS_CACHE:
-        return _INSIGHTS_CACHE[name]
-
-    # Disk-backed second layer — LLM output survives pod restarts.
-    persisted = ai_cache.get("insights", name)
-    if persisted is not None:
-        resp = MatchInsightsResponse(
-            demo_file=name, summary=persisted, model=_get_ai_model_name(),
-        )
-        _INSIGHTS_CACHE[name] = resp
-        return resp
-
-    cache_path = _TIMELINE_CACHE_DIR / f"{name}.json"
-    if not cache_path.exists():
-        # Force a parse first so the digest builder has data.
+    from backend.analysis.match_snapshot import PROMPT_VERSION, prompt, validate_snapshot, report_schema
+    from backend.analysis.tactical_ai import configuration
+    from backend.ingestion.demo_parser import TIMELINE_CACHE_VERSION
+    async with _INSIGHTS_LOCKS.setdefault(name, asyncio.Lock()):
         await get_match_replay_timeline(name)
-    if not cache_path.exists():
-        raise HTTPException(status_code=500, detail="Timeline cache missing after parse")
-
-    with cache_path.open("r", encoding="utf-8") as f:
-        bundle = json.load(f)
-
-    digest = _build_match_digest(name, bundle)
-
-    prompt = (
-        "You are a CS2 post-game analyst. Below is a structured digest of a "
-        "professional Counter-Strike 2 match. Write a 3–5 paragraph narrative "
-        "recap aimed at a fan who didn't watch live: call out the turning "
-        "points, standout players, and any interesting utility or bomb-site "
-        "trends. Plain prose, no markdown headers, no bullet lists.\n\n"
-        f"---\n{digest}\n---"
-    )
-
-    try:
-        summary = await _llm_complete(prompt, max_tokens=1500)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("LLM call failed for %s", name)
-        raise HTTPException(status_code=502, detail=f"AI error: {exc}")
-
-    resp = MatchInsightsResponse(
-        demo_file=name,
-        summary=summary,
-        model=_get_ai_model_name(),
-    )
-    _INSIGHTS_CACHE[name] = resp
-    ai_cache.put("insights", name, summary)
-    return resp
+        cache_path = _TIMELINE_CACHE_DIR / f"{name}.json"
+        if not cache_path.exists():
+            raise HTTPException(500, "Timeline cache missing after parse")
+        roster = _load_roster_for_demo(name) or {}
+        config = configuration()
+        model = config['model']
+        fingerprint = {"prompt": PROMPT_VERSION, "provider": config['provider'], "model": model, "demo": name, "roster": roster,
+                       "revision": timeline_cache.revision(settings.demo_dir/name, cache_path, TIMELINE_CACHE_VERSION)}
+        key = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()
+        if key in _INSIGHTS_CACHE:
+            return _INSIGHTS_CACHE[key]
+        persisted = await asyncio.to_thread(ai_cache.get, "insights", key)
+        if persisted is None:
+            def digest_from_disk():
+                from backend.analysis.match_snapshot import build_digest
+                with cache_path.open(encoding="utf-8") as stream:
+                    return build_digest(name, json.load(stream), roster)
+            digest = await asyncio.to_thread(digest_from_disk)
+            try:
+                persisted = validate_snapshot(await _llm_complete(prompt(digest), max_tokens=1400, schema=report_schema()))
+            except HTTPException:
+                raise
+            except Exception:
+                raise HTTPException(502, "Could not generate the match snapshot. No report was saved.") from None
+            await asyncio.to_thread(ai_cache.put, "insights", key, persisted)
+        resp = MatchInsightsResponse(demo_file=name, summary=persisted, model=model)
+        _INSIGHTS_CACHE[key] = resp
+        return resp
 
 
 # ---------------------------------------------------------------------------

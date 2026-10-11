@@ -14,13 +14,15 @@ try {
   const info={demo_file:'cache.dem',team1:{name:'Scouted',players:['Alpha'],players_detailed:[{steamid:'own',name:'Alpha'}]},team2:{name:'Enemy',players:['Opponent']}};
   const round={id:'cache.dem:R14',demo_file:'cache.dem',round:14,side:'CT',buy:'full-buy',active_players:4,won:true,planted_site:'A',plant_seconds:40,equipment:20000,
     routes:[{player:'Alpha',samples:[{seconds:10,location:'radar grid B2'}]}],possible_lurks:[],utility:[{type:'smoke',player:'Alpha',seconds:14,from:'radar grid B2',to:'radar grid C3',landing:[300,724],phase:'preplant'}]};
-  const evidence={version:2,team:'Scouted',map:'de_cache',demos:1,rounds:[round],skipped_rounds:0,limitations:['Intent is uncertain.'],
+  const evidence={version:3,team:'Scouted',map:'de_cache',demos:1,rounds:[round],skipped_rounds:0,limitations:['Intent is uncertain.'],
     groups:[{side:'CT',buy:'full-buy',rounds:1,wins:1,planted_sites:{A:1},round_refs:[round.id],common_utility:[{type:'smoke',location:'radar grid C3',throws:1,rounds:1,players:['Alpha'],round_refs:[round.id]}]}]};
-  const report={overview:'Observed CT hold with a supporting smoke.',limitations:['Single observed round.'],sections:[{side:'CT',buy:'full-buy',plan:'Alpha sets up near radar grid B2.',utility:'Alpha throws a smoke at 14s.',possible_lurks:'No T lurk inference for this CT setup.',confidence:'low',round_refs:[round.id]}]};
+  const report={overview:'Observed CT hold with a supporting smoke.',limitations:['Single observed round.'],sections:[{side:'CT',buy:'full-buy',plan:'Alpha sets up near radar grid B2.',utility:'Alpha throws a smoke at 14s.',possible_lurks:'No T lurk inference for this CT setup.',confidence:'low',round_refs:[round.id],
+    variations:[{name:'Plan 1 — R14 hold',opening:'Alpha near grid B2; other positions unknown.',timing:'B2 sampled at 10s; no rotation confirmed.',utility:'Alpha smoke B2 → C3 at 14s.',roles:'CT setup, not a lurk.',round_refs:[round.id]}],watch_for:['One round only.'],counterplay:['Consider checking C3; hypothesis only.']}]};
+  const snapshot='RESULT\n- Scouted won.\n\nKEY ROUNDS\n- Review R14.\n\nSTANDOUT PLAYERS\n- Alpha led kills.\n\nBOMB / UTILITY\n- One recorded smoke.\n\nCHECK NEXT\n- Review the sampled positions.';
   browser=await chromium.launch({channel:'chrome',headless:true});
   const page=await browser.newPage({viewport:{width:1500,height:1000}}),errors=[];
   page.on('pageerror',e=>errors.push(e.message));
-  let reportRequests=0,evidenceRequests=0,configured=true;
+  let reportRequests=0,evidenceRequests=0,snapshotRequests=0,configured=true;
   await page.route('**/api/**',async route=>{
     const path=new URL(route.request().url()).pathname;
     let body={};
@@ -36,6 +38,7 @@ try {
     else if(path.endsWith('/revision'))body={revision:'tactical-ui-test'};
     else if(path.endsWith('/timeline'))body=timeline;
     else if(path.endsWith('.png'))return route.fulfill({contentType:'image/png',body:readFileSync('backend/data/radars/de_cache.png')});
+    else if(path.endsWith('/insights') && route.request().method()==='POST'){snapshotRequests++;body={demo_file:'cache.dem',summary:snapshot,model:'test'};}
     else if(path.startsWith('/api/radars/'))body={map_name:'de_cache',pos_x:0,pos_y:1024,scale:1,image_url:'/api/radars/de_cache.png'};
     else if(path.startsWith('/api/callouts/'))body={callouts:[]};
     await route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
@@ -57,11 +60,25 @@ try {
   await ai.getByRole('button',{name:'Both sides',exact:true}).click();
   assert.equal(await ai.locator('article').count(),1);
   await ai.locator('article summary').click();
+  await ai.getByRole('heading',{name:'Plan 1 — R14 hold'}).waitFor();
+  assert.match(await ai.innerText(),/Setup[\s\S]*Timing \/ rotations[\s\S]*Utility support[\s\S]*Roles \/ possible lurks/);
+  assert.match(await ai.innerText(),/Counterplay · coaching hypotheses/i);
   assert.match(await ai.innerText(),/14s · Alpha · smoke/);
   assert.equal(reportRequests,1,'Side/evidence filters do not make new provider requests');
   mkdirSync('.cache/ui-preview',{recursive:true});
   await ai.screenshot({path:'.cache/ui-preview/team-ai.png'});
-  await ai.getByRole('link',{name:/Demo 1 · R14/}).click();
+  await page.locator('summary').filter({hasText:'Match snapshot (all players)'}).click();
+  assert.equal(snapshotRequests,0);
+  assert.equal(await page.getByRole('button',{name:'Generate snapshot',exact:true}).isEnabled(),false);
+  await page.getByRole('checkbox',{name:'Allow match snapshot evidence upload'}).check();
+  await page.getByRole('button',{name:'Generate snapshot',exact:true}).click();
+  await page.getByRole('heading',{name:'KEY ROUNDS',exact:true}).waitFor();
+  assert.equal(snapshotRequests,1);
+  assert.equal(await page.getByRole('listitem').filter({hasText:'Review R14.'}).count(),1);
+  await page.setViewportSize({width:760,height:900});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);
+  await page.setViewportSize({width:1500,height:1000});
+  await ai.getByRole('link',{name:/Demo 1 · R14/}).first().click();
   await page.getByRole('button',{name:'Round 14',exact:true}).waitFor();
   assert.equal(await page.getByRole('button',{name:'Round 14',exact:true}).getAttribute('aria-pressed'),'true','Cited round deep-link');
   configured=false;
