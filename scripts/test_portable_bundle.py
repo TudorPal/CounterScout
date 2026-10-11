@@ -110,7 +110,7 @@ def main():
                 health = wait_ready(process)
                 assert health["version"] == expected, health
                 print(f"PASS frozen startup/API ({time.monotonic() - started:.1f}s), version {expected}", flush=True)
-                for route in ("/", "/replay", "/ingest", "/lineups", "/replay/filename.dem", "/replay/filename.dem/insights"):
+                for route in ("/", "/replay", "/ingest", "/lineups", "/replay/filename.dem", "/replay/filename.dem/insights", "/replay/filename.dem/insights/heatmap", "/replay/filename.dem/insights/patterns"):
                     assert b"CounterScout" in get(route)[2], route
                 page = get("/")[2].decode()
                 import re
@@ -166,11 +166,12 @@ def main():
                         assert all(g["points"][0][0] >= start for g in timeline["grenades"])
                     print(f"PASS native parser/replay: {info['map_name']}, {len(timeline['rounds'])} rounds", flush=True)
                     if args.playwright_package:
-                        ui = subprocess.run([shutil.which("node"), str(Path(__file__).parent / "test_replay_workspace.mjs"),
-                                             str(args.playwright_package.resolve()), "portable-smoke.dem"], capture_output=True, timeout=60)
-                        if ui.returncode:
-                            raise RuntimeError("Browser UI regression failed: " + ui.stderr[-4000:].decode("utf-8", errors="replace"))
-                        print(ui.stdout.decode("utf-8", errors="replace"), flush=True)
+                        for script in ("test_replay_workspace.mjs", "test_insights_workspace.mjs"):
+                            ui = subprocess.run([shutil.which("node"), str(Path(__file__).parent / script),
+                                                 str(args.playwright_package.resolve()), "portable-smoke.dem"], capture_output=True, timeout=90)
+                            if ui.returncode:
+                                raise RuntimeError("Browser UI regression failed: " + ui.stderr[-4000:].decode("utf-8", errors="replace"))
+                            print(ui.stdout.decode("utf-8", errors="replace"), flush=True)
                         print("PASS browser replay UI against the frozen backend/static frontend", flush=True)
                 # Do not wait for the timer after tests. Only stop our EXE.
                 process.terminate()

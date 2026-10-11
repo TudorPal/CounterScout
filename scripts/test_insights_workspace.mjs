@@ -31,12 +31,12 @@ try {
   const events = page.getByLabel('Round events', {exact: true});
   assert.equal(await events.count(), 1);
   assert.equal(await page.getByLabel('Select insights round', {exact: true}).count(), 0);
-  const roundView = page.getByRole('button', {name: 'Round Utility', exact: true});
-  assert.equal(await roundView.getAttribute('aria-pressed'), 'true');
+  const roundView = page.getByRole('link', {name: 'Round Utility', exact: true});
+  assert.equal(await roundView.getAttribute('aria-current'), 'page');
   await page.getByRole('button', {name: `Round ${mixedRound.num}`, exact: true}).click();
-  const types = page.getByRole('group', {name: 'Round utility types', exact: true});
+  const types = page.getByRole('group', {name: 'Utility types', exact: true});
   const smokeCount = roundNades(mixedRound).filter(g => g.type === 'smokegrenade').length;
-  await types.getByRole('button', {name: 'Smoke', exact: true}).click();
+  for (const type of ['Flash','HE','Molotov','Decoy']) await types.getByRole('button',{name:type,exact:true}).click();
   await page.waitForFunction(count => document.querySelectorAll('[data-utility-type]').length === count, smokeCount);
   assert.equal(await summary.getByLabel('Round utility count', {exact: true}).innerText(), `${smokeCount} throws`);
   assert.ok((await summary.innerText()).includes(`Round ${mixedRound.num}`), 'Prominent summary follows the selected round');
@@ -44,12 +44,13 @@ try {
   assert.equal(await workspace.locator('[data-round-utility-type]').count(), smokeCount);
   await events.locator('[data-utility-type]').first().click();
   await page.waitForFunction(() => document.querySelectorAll('[data-round-utility-type]').length === 1);
-  await types.getByRole('button', {name: 'Fire', exact: true}).click();
+  await types.getByRole('button', {name: 'Smoke', exact: true}).click();
+  await types.getByRole('button', {name: 'Molotov', exact: true}).click();
   const fireCount = roundNades(mixedRound).filter(g => ['molotov', 'incgrenade', 'incendiary'].includes(g.type)).length;
   await page.waitForFunction(count => document.querySelectorAll('[data-round-utility-type]').length === count, fireCount);
   assert.equal(await events.locator('[data-utility-type]').count(), fireCount, 'Changing type clears stale pin and updates radar/list together');
   if (!fireCount) assert.equal(await events.getByText('No throws match this utility filter.', {exact: true}).count(), 1);
-  await types.getByRole('button', {name: 'All utility', exact: true}).click();
+  await types.getByRole('button', {name: 'All', exact: true}).click();
   await page.waitForFunction(count => document.querySelectorAll('[data-round-utility-type]').length === count, roundNades(mixedRound).length);
   const filters = page.getByLabel('Insights team and player filters', {exact: true});
   const teamNames = await filters.locator('h2').allTextContents();
@@ -93,11 +94,11 @@ try {
   await page.getByRole('button', {name: 'Events', exact: true}).click();
   await events.waitFor({state: 'visible'});
   const roundWidth = (await workspace.boundingBox()).width;
-  for (const mode of ['Heatmap', 'Patterns']) {
-    await page.getByRole('button', {name: mode, exact: true}).click();
+  for (const mode of ['Utility Heatmap', 'Movement Patterns']) {
+    await page.getByRole('link', {name: mode, exact: true}).click();
     await page.waitForFunction(() => !document.querySelector('[aria-label="Round events"]'));
     assert.ok((await workspace.boundingBox()).width > roundWidth + 200, 'Aggregate modes reclaim event sidebar width');
-    assert.equal(await types.count(), 0);
+    assert.equal(await types.count(), 1, 'All tactical views share the same utility controls');
     assert.equal(await filters.getByRole('checkbox').count(), timeline.players.length + 2);
     await save(`insights-${mode.toLowerCase()}-1280.png`);
   }
@@ -107,7 +108,7 @@ try {
   const playerId = await player.getAttribute('data-player-id');
   await player.getByRole('checkbox').uncheck();
   assert.equal(await player.getByRole('checkbox').isChecked(), false);
-  await page.getByRole('button', {name: 'Heatmap', exact: true}).click();
+  await page.getByRole('link', {name: 'Utility Heatmap', exact: true}).click();
   assert.equal(await filters.locator(`[data-player-id="${playerId}"]`).getByRole('checkbox').isChecked(), false, 'Player choices persist across views');
   assert.deepEqual(errors, [], 'No browser runtime errors');
   console.log(`Insights workspace: ${demo}, docked player filters, stable team order, round selection, smoke/fire isolation, pin reset, adaptive layouts and contextual sidebar passed.`);
