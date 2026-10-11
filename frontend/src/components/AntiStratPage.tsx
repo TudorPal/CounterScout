@@ -30,6 +30,7 @@ import { buildScoutRounds, defaultScoutFilters, filterScoutTimeline, scoutTeamId
 import type { ScoutFilters, ScoutSource } from "../utils/teamScout";
 import { roundAnchor, snapshotAt } from "../utils/replayState";
 import { scoutTeamNames, scoutTeamDemos } from "../utils/scoutDiscovery";
+import { buildScoutAwps } from "../utils/scoutAwps";
 
 // ─── Constants ─────────────────────────────────────────────────────────
 const RADAR_PX = 1024;
@@ -206,6 +207,10 @@ export default function AntiStratPage() {
 
   // ── UI state ──
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
+  const [awpPlayer, setAwpPlayer] = useState("primary");
+  const [awpView, setAwpView] = useState<"holds" | "positions">("holds");
+  const [awpScoped, setAwpScoped] = useState(false);
+  useEffect(()=>{setAwpPlayer("primary");setAwpView("holds");setAwpScoped(false);},[teamName,selectedMap]);
 
   // ── Load demos on mount ──
   useEffect(() => {
@@ -400,67 +405,12 @@ export default function AntiStratPage() {
   }, [timelines, teamSidSets, radar, callouts, phase]);
 
   // ── D. AWP Positions ──
-  const awpData = useMemo(() => {
-    if (phase !== "done" || !radar) return { points: [] as { x: number; y: number }[], primaryAwper: "" };
-    const pts: { x: number; y: number }[] = [];
-    const awpTicks = new Map<string, number>();
-
-    // Only sample every ~2 seconds (skip sequential samples) and filter out
-    // movement — only keep positions where the player is roughly stationary
-    // (consecutive samples within 50 world units = holding an angle)
-    const SKIP = 16; // sample every 16th tick (~2 seconds at 8-tick decimation)
-    const MOVE_THRESH = 50; // world units — if moved more than this, it's a rotation/walk
-
-    for (let i = 0; i < timelines.length; i++) {
-      const tl = timelines[i];
-      const sids = teamSidSets[i];
-      for (const sid of sids) {
-        const samples = tl.positions[sid] ?? [];
-        let lastX = -9999, lastY = -9999;
-        let skipCount = 0;
-        for (const s of samples) {
-          if (!s.alive || (s.tn !== 3)) continue; // CT-side only
-          const wpn = (s.w ?? "").toLowerCase();
-          if (wpn === "awp") {
-            awpTicks.set(sid, (awpTicks.get(sid) ?? 0) + 1);
-            skipCount++;
-            if (skipCount % SKIP !== 0) continue;
-            // Only add if roughly stationary (not running between positions)
-            const dist = Math.hypot(s.x - lastX, s.y - lastY);
-            if (dist < MOVE_THRESH || lastX === -9999) {
-              const rp = toRadar(s.x, s.y, radar);
-              if (rp.x >= 0 && rp.x <= RADAR_PX && rp.y >= 0 && rp.y <= RADAR_PX) {
-                pts.push(rp);
-              }
-            }
-            lastX = s.x;
-            lastY = s.y;
-          } else {
-            lastX = -9999;
-            lastY = -9999;
-            skipCount = 0;
-          }
-        }
-      }
-    }
-
-    const decimated = pts;
-
-    let primaryAwper = "";
-    let maxTicks = 0;
-    for (const [sid, count] of awpTicks) {
-      if (count > maxTicks) {
-        maxTicks = count;
-        // Find name
-        for (const tl of timelines) {
-          const p = tl.players.find((pl) => pl.steamid === sid);
-          if (p) { primaryAwper = p.name; break; }
-        }
-      }
-    }
-
-    return { points: decimated, primaryAwper };
-  }, [timelines, teamSidSets, radar, phase]);
+  const awpData = useMemo(() => buildScoutAwps(phase === "done" ? selectedSources : [], filters), [selectedSources,filters,phase]);
+  const selectedAwper = awpPlayer === "all" ? null : awpPlayer === "primary" ? awpData.primary : awpData.players.find(p=>p.steamid===awpPlayer) ?? awpData.primary;
+  const awpPoints = useMemo(()=>radar ? awpData.points
+    .filter(p=>(!selectedAwper || p.steamid===selectedAwper.steamid) && (awpView!=="holds" || p.holding) && (!awpScoped || p.scoped))
+    .map(p=>toRadar(p.x,p.y,radar)).filter(p=>p.x>=0 && p.x<=RADAR_PX && p.y>=0 && p.y<=RADAR_PX) : [],
+    [awpData,radar,selectedAwper,awpView,awpScoped]);
 
   // ── E. Round Win Patterns ──
   const winPatterns = useMemo(() => {
@@ -916,10 +866,34 @@ export default function AntiStratPage() {
               </div>
 
               {/* AWP Positions */}
-              <div className="hud-panel p-5">
-                <SectionHeader num="05" title="AWP Positions" sub={awpData.primaryAwper ? `Primary: ${awpData.primaryAwper}` : "CT-side AWP holding spots"} />
-                {radar && <RadarHeatmap radar={radar} points={awpData.points} label="AWP positions (CT)" />}
-              </div>
+              <section className="hud-panel p-5" aria-label="AWP scouting summary">
+                <SectionHeader num="05" title="AWP Usage & Positions" sub={`${filters.side==="all"?"Both sides":filters.side} · ${filters.phase==="postplant"?"After plant":"Live rounds"} · ${selectedSources.length} selected matches`} />
+                {awpData.primary ? <>
+                  <div className="mb-3"><p className="text-sm font-semibold">Primary AWPer: <span className="text-scout-accent">{awpData.primary.name}</span></p>
+                    <p className="text-xs text-scout-muted mt-1">Most rounds carrying an AWP in this selection; ties use active AWP time. This is observed usage, not an assigned team role.</p></div>
+                  <div className="grid grid-cols-2 gap-2 mb-3">
+                    <StatCard label="Team AWP rounds" value={`${awpData.awpRounds} / ${awpData.totalRounds}`} sub="At least one alive player carrying an AWP"/>
+                    <StatCard label="Primary AWP kills" value={`${awpData.primary.kills}`} sub={`${awpData.primary.rounds} AWP rounds · ${awpData.primary.demos} matches`}/>
+                  </div>
+                  <p className="text-xs text-scout-muted mb-2">Choose a player to inspect their positions.</p>
+                  <div className="overflow-x-auto mb-3"><table className="w-full text-xs"><thead className="text-scout-muted"><tr><th className="text-left py-2">Player</th><th className="text-right">AWP rounds</th><th className="text-right">Active time</th><th className="text-right">AWP kills</th></tr></thead>
+                    <tbody>{awpData.players.map(p=><tr key={p.steamid} className={selectedAwper?.steamid===p.steamid?"bg-scout-accent/10":""}>
+                      <td className="py-2"><button className="font-semibold text-left hover:text-scout-accent" aria-pressed={selectedAwper?.steamid===p.steamid} aria-label={`AWP positions for ${p.name}`} onClick={()=>setAwpPlayer(p.steamid)}>{p.name}{p.steamid===awpData.primary?.steamid && <span className="text-scout-accent ml-1">★</span>}</button></td>
+                      <td className="text-right font-mono">{p.rounds}</td><td className="text-right font-mono">{Math.floor(Math.round(p.activeSeconds)/60)}:{String(Math.round(p.activeSeconds)%60).padStart(2,"0")}</td><td className="text-right font-mono">{p.kills}</td>
+                    </tr>)}</tbody></table></div>
+                  <div className="flex flex-wrap gap-2 mb-3">
+                    <button className={`hud-tab ${awpPlayer==="primary"?"hud-tab-active":"hud-tab-idle"}`} aria-pressed={awpPlayer==="primary"} onClick={()=>setAwpPlayer("primary")}>Primary AWPer</button>
+                    <button className={`hud-tab ${awpPlayer==="all"?"hud-tab-active":"hud-tab-idle"}`} aria-pressed={awpPlayer==="all"} onClick={()=>setAwpPlayer("all")}>All AWP players</button>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2 mb-3">{(["holds","positions"] as const).map(view=><button key={view} aria-pressed={awpView===view} onClick={()=>setAwpView(view)} className={`hud-tab ${awpView===view?"hud-tab-active":"hud-tab-idle"}`}>{view==="holds"?"Holding spots":"All AWP positions"}</button>)}
+                    <label className="flex items-center gap-2 text-xs"><input type="checkbox" checked={awpScoped} onChange={e=>setAwpScoped(e.target.checked)} className="accent-scout-accent"/>Scoped only</label>
+                  </div>
+                  {radar && <RadarHeatmap radar={radar} points={awpPoints} label={`${selectedAwper?.name ?? "All AWP players"} · ${awpView==="holds"?"Holding spots":"Active AWP positions"}`}/>}
+                  <p className="text-xs text-scout-muted mt-3">{awpPoints.length} position samples plotted at a 1-second cadence. Holding spots require ~2s of continuous, low-movement AWP use. Freeze time, dead players and opponents are excluded; switching to utility still counts as carrying an AWP, but not active time.</p>
+                  {!awpPoints.length && <p className="text-xs text-scout-muted mt-2">No matching positions. Try All AWP positions, disable Scoped only, or broaden the match/side/scenario filters.</p>}
+                </> : <p role="status" className="text-sm text-scout-muted py-6">{awpData.totalRounds===0?"No rounds match the current selection.":awpData.weaponDataRounds===0?"Weapon data is unavailable for these rounds. Re-parse the demos to recover AWP information.":"No AWP usage observed in the selected rounds. Try another side, scenario or match selection."}</p>}
+                {awpData.weaponDataRounds>0 && awpData.weaponDataRounds<awpData.totalRounds && <p className="text-xs text-scout-muted mt-2">Weapon data is available in {awpData.weaponDataRounds} of {awpData.totalRounds} selected rounds; usage may be understated.</p>}
+              </section>
             </div>
 
             {/* ═══ Player Breakdown ═══ */}

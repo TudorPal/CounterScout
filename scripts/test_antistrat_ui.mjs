@@ -19,7 +19,8 @@ try {
   const info={demo_file:'cache.dem',team1:{name:'Scouted',players:['Alpha'],players_detailed:[{steamid:'own',name:'Alpha'}]},team2:{name:'Enemy',players:['Opponent']}};
   const timeline={tick_rate:10,tick_max:900,map_name:'de_cache',players:[{steamid:'own',name:'Alpha',team_num:2},{steamid:'enemy',name:'Opponent',team_num:3}],
     rounds:[{num:1,start_tick:0,freeze_end_tick:20,end_tick:900,winner:'T'}],
-    positions:{own:[{t:20,x:200,y:824,alive:true,tn:2},{t:35,x:250,y:774,alive:true,tn:2},{t:50,x:300,y:724,alive:true,tn:2},{t:100,x:400,y:624,alive:true,tn:2}],enemy:[]},
+    positions:{own:[{t:20,x:200,y:824,alive:true,tn:2},{t:35,x:250,y:774,alive:true,tn:2},{t:50,x:300,y:724,alive:true,tn:2},{t:100,x:400,y:624,alive:true,tn:2},
+      ...Array.from({length:81},(_,i)=>({t:200+i,x:400,y:624,alive:true,tn:2,w:'awp',inv:['awp'],sc:true}))],enemy:[]},
     events:[{tick:200,type:'bomb_plant',data:{site:'A',planter:'own'}}],
     grenades:[{type:'smokegrenade',thrower:'own',detonate_tick:50,points:[[40,250,774],[50,350,674]]},
       {type:'flashbang',thrower:'own',detonate_tick:80,points:[[60,500,600],[80,600,500]]}]};
@@ -67,7 +68,29 @@ try {
   await page.mouse.move(box.x+250/1024*box.width,box.y+250/1024*box.height);
   assert.match(await explorer.getByRole('status').innerText(),/Alpha.*Match 1.*R1/);
   await page.mouse.move(0,0);
+  const awp=page.getByRole('region',{name:'AWP scouting summary'});
+  await awp.scrollIntoViewIfNeeded();
+  assert.match(await awp.innerText(),/Primary AWPer: Alpha/);
+  assert.match(await awp.innerText(),/Both sides/);
+  await awp.getByRole('button',{name:'All AWP positions',exact:true}).click();
+  assert.equal(await awp.getByRole('button',{name:'All AWP positions',exact:true}).getAttribute('aria-pressed'),'true');
+  await awp.getByRole('checkbox',{name:'Scoped only'}).check();
+  assert.equal(await awp.getByRole('checkbox',{name:'Scoped only'}).isChecked(),true);
+  await awp.getByRole('button',{name:'AWP positions for Alpha'}).click();
+  assert.equal(await awp.getByRole('button',{name:'AWP positions for Alpha'}).getAttribute('aria-pressed'),'true');
+  await page.getByRole('combobox',{name:'Scout side'}).fill('CT');
+  await page.getByRole('option',{name:'CT · Defending / retaking',exact:true}).click();
+  assert.match(await awp.getByRole('status').innerText(),/No rounds match/);
+  await page.getByRole('combobox',{name:'Scout side'}).fill('T · Attacking');
+  await page.getByRole('option',{name:'T · Attacking',exact:true}).click();
+  assert.match(await awp.innerText(),/Primary AWPer: Alpha/,'T-side AWP data remains available');
+  await page.getByRole('combobox',{name:'Scout scenario'}).fill('After plant');
+  await page.getByRole('option',{name:'After plant only',exact:true}).click();
+  assert.match(await awp.innerText(),/After plant/);
+  assert.match(await awp.innerText(),/Primary AWPer: Alpha/);
   mkdirSync('.cache/ui-preview',{recursive:true});
+  await awp.scrollIntoViewIfNeeded();
+  await awp.screenshot({path:'.cache/ui-preview/antistrat-awp.png'});
   await page.screenshot({path:'.cache/ui-preview/antistrat-players.png',fullPage:true});
   await page.setViewportSize({width:1100,height:900});
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false,'No page horizontal overflow');
