@@ -1,0 +1,46 @@
+// Isolated browser regression: no real backend or demo files are changed.
+import assert from 'node:assert/strict';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {preview} from '../frontend/node_modules/vite/dist/node/index.js';
+const {chromium}=await import(pathToFileURL(resolve(process.env.COUNTERSCOUT_PLAYWRIGHT)).href);
+const server=await preview({root:resolve('frontend'),configFile:resolve('frontend/vite.config.ts'),preview:{host:'127.0.0.1',port:5189,strictPort:true}});
+let browser;
+try {
+  browser=await chromium.launch({channel:'chrome',headless:true});
+  const page=await browser.newPage(), errors=[];
+  page.on('pageerror',e=>errors.push(e.message));
+  let state='initial';
+  await page.route('**/api/**',async route=>{
+    const path=new URL(route.request().url()).pathname;
+    const imports=[{id:'old',state:'done',demo_file:'old.dem'}];
+    if(state!=='initial')imports.push({id:'new',state,demo_file:state==='done'?'new.dem':null});
+    const timeline={tick_rate:64,tick_max:100,map_name:'de_anubis',players:[],rounds:[{num:1,start_tick:0,freeze_end_tick:10,end_tick:100,winner:'T'}],events:[],grenades:[],positions:{}};
+    const body=path.endsWith('/bridge/library')?{matches:[],commands:[],imports}:path.endsWith('/ingest/status')?{run_id:0,last_completed_run_id:0}:path.endsWith('/demos')?[]:path.endsWith('/timeline')?timeline:path.endsWith('/revision')?{revision:'import-menu-fixture'}:path.includes('/radars/')?{pos_x:0,pos_y:1024,scale:1}:{};
+    await route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
+  });
+  await page.goto('http://127.0.0.1:5189/replay');
+  await page.waitForTimeout(400);
+  assert.equal(await page.getByText('FACEIT demo ready',{exact:true}).count(),0,'No historical notification flood');
+  state='importing';
+  await page.getByLabel('Import activity',{exact:true}).waitFor();
+  await page.getByLabel('Import activity',{exact:true}).click();
+  await page.getByText('Analysing FACEIT demo',{exact:true}).waitFor();
+  await page.getByRole('link',{name:'Anti-Strat',exact:true}).click();
+  await page.getByLabel('Import activity',{exact:true}).waitFor();
+  state='done';
+  await page.getByRole('link',{name:'Open replay →',exact:true}).waitFor();
+  assert.match(await page.getByRole('link',{name:'Open replay →',exact:true}).getAttribute('href'),/new.dem$/);
+  await page.getByRole('link',{name:'Open replay →',exact:true}).click();
+  await page.getByLabel('Import activity',{exact:true}).waitFor();
+  await page.getByLabel('Import activity',{exact:true}).click();
+  const bounds=await page.getByLabel('Import progress',{exact:true}).boundingBox();
+  assert.ok(bounds.x>=8 && bounds.width>=250,'Replay sidebar must not clip the Imports popover');
+  assert.ok(bounds.y>=8 && bounds.y+bounds.height<=720,'Import popover stays within the viewport');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.getByLabel('Import progress',{exact:true}).count(),0);
+  await page.getByLabel('Dismiss import notification').click();
+  assert.equal(await page.getByRole('link',{name:'Open replay →',exact:true}).count(),0);
+  assert.deepEqual(errors,[]);
+  console.log('Import notifications: initial history suppressed, extension parsing visible across routes, completion Replay action and dismissal passed.');
+} finally {await browser?.close();await server.httpServer.close();}

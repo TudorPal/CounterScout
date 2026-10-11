@@ -24,6 +24,7 @@ import LogoMark from "./LogoMark";
 import { matchIdentity, scoreAt, sideColor } from "../utils/replayState";
 import AppBackdrop from "./AppBackdrop";
 import AiRecapPanel from "./AiRecapPanel";
+import ImportActivityMenu from './ImportActivity';
 
 const TABS = [
   { to: "", label: "Replay", end: true },
@@ -134,6 +135,7 @@ export default function ReplayLayout() {
           </nav>
         </details>
         <button onClick={() => navigate("/replay")} className="hud-btn text-xs">← Library</button>
+        <ImportActivityMenu align="left" />
         <nav aria-label="Demo views" className="flex flex-col gap-1">
           {TABS.map(tab => <NavLink key={tab.label} to={tab.to ? `${basePath}/${tab.to}` : basePath} end
             className={({ isActive }) => `rounded-lg px-3 py-2.5 text-xs text-left transition ${isActive ? "bg-scout-accent/10 text-scout-accent border border-scout-accent/30" : "text-scout-muted hover:text-white hover:bg-white/5 border border-transparent"}`}>

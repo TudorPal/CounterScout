@@ -3,6 +3,7 @@
  */
 import axios from "axios";
 import { cachedReplay, invalidateReplay } from "./replayCache";
+import {startUpload} from '../utils/importActivity';
 
 const api = axios.create({ baseURL: "/api" });
 
@@ -582,15 +583,20 @@ export const uploadDemo = async (
   form.append("file", file);
   if (teamNames?.team1?.trim()) form.append("team1_name", teamNames.team1.trim());
   if (teamNames?.team2?.trim()) form.append("team2_name", teamNames.team2.trim());
+  const activity = startUpload(file.name);
+  try {
   const { data } = await api.post<MatchDemoEntry>("/match-replay/upload", form, {
     headers: { "Content-Type": "multipart/form-data" },
     onUploadProgress: (e) => {
+      if (e.total) activity.progress(Math.round((e.loaded * 100) / e.total));
       if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
     },
     timeout: 600000, // 10 min for large demos
   });
   await invalidateReplay(data.demo_file);
+  activity.done(data.demo_file);
   return data;
+  } catch (error) { activity.failed(error); throw error; }
 };
 
 export interface DemoBatchUploadResponse {
@@ -604,15 +610,20 @@ export const uploadDemos = async (
 ): Promise<DemoBatchUploadResponse> => {
   const form = new FormData();
   for (const file of files) form.append("files", file);
+  const activity = startUpload(`${files.length} demo${files.length === 1 ? '' : 's'}`);
+  try {
   const { data } = await api.post<DemoBatchUploadResponse>("/match-replay/upload-batch", form, {
     headers: { "Content-Type": "multipart/form-data" },
     onUploadProgress: (e) => {
+      if (e.total) activity.progress(Math.round((e.loaded * 100) / e.total));
       if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
     },
     timeout: 600000,
   });
   await Promise.all(data.uploaded.map(demo => invalidateReplay(demo.demo_file)));
+  activity.done(data.uploaded[0]?.demo_file, data.failed.length ? data.failed.map(item => `${item.file}: ${item.error}`).join('; ') : undefined);
   return data;
+  } catch (error) { activity.failed(error); throw error; }
 };
 
 export const deleteDemo = async (demoFile: string): Promise<void> => {
