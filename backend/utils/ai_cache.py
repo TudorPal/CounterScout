@@ -1,12 +1,12 @@
 """
-Tiny SQLite-backed KV for paid LLM outputs (match recaps, lineup
-descriptions). The in-process dicts in main.py stay as a hot layer; this
-survives pod restarts so a redeploy never re-bills the same prompt.
+Tiny SQLite-backed KV for AI outputs and compact tactical evidence.
+This survives restarts so repeated reports do not consume quota again.
 SQLite-only by design — it shares the lineup DB file/volume.
 """
 from __future__ import annotations
 
 import logging
+from contextlib import contextmanager
 import sqlite3
 import time
 from pathlib import Path
@@ -28,8 +28,16 @@ class AICache:
                 " created INTEGER NOT NULL, PRIMARY KEY (kind, key))"
             )
 
-    def _conn(self) -> sqlite3.Connection:
-        return sqlite3.connect(self.db_path)
+    @contextmanager
+    def _conn(self):
+        # SQLite's transaction context manager does not close the connection.
+        # Explicit closing prevents leaked handles/file locks on Windows.
+        conn = sqlite3.connect(self.db_path)
+        try:
+            with conn:
+                yield conn
+        finally:
+            conn.close()
 
     def get(self, kind: str, key: str) -> Optional[str]:
         try:
