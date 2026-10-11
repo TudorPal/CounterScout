@@ -20,7 +20,7 @@ try {
   let recapCalls = 0;
   await page.route('**/api/match-replay/*/insights', route => {
     recapCalls++;
-    return route.fulfill({json: {demo_file: demo, summary: 'Test recap retained across workspace tabs.', model: 'test'}});
+    return route.fulfill({json: {demo_file: demo, summary: 'RESULT\n- Test snapshot retained across workspace tabs.\n\nKEY ROUNDS\n- Review R1.\n\nSTANDOUT PLAYERS\n- Recorded kills only.\n\nBOMB / UTILITY\n- Recorded throws only.\n\nCHECK NEXT\n- Review the replay.', model: 'test'}});
   });
   // Large position timelines exceed Chrome's inspector response-body cache.
   // Read the same real API via Node; leave the page's network flow untouched.
@@ -123,14 +123,16 @@ try {
   }
   assert.equal(recapCalls, 0, 'Browsing replay makes no AI request');
   await page.getByRole('link', {name: 'AI Recap', exact: true}).click();
-  await page.getByRole('heading', {name: 'AI Recap', exact: true}).waitFor();
+  await page.getByRole('heading', {name: 'AI team analysis', exact: true}).waitFor();
   assert.equal(recapCalls, 0, 'Opening recap makes no AI request');
-  await page.getByRole('button', {name: 'Generate recap', exact: true}).click();
-  await page.getByText('Test recap retained across workspace tabs.', {exact: true}).waitFor();
+  await page.locator('summary').filter({hasText:'Match snapshot (all players)'}).click();
+  await page.getByRole('checkbox',{name:'Allow match snapshot evidence upload'}).check();
+  await page.getByRole('button', {name: 'Generate snapshot', exact: true}).click();
+  await page.getByText('Test snapshot retained across workspace tabs.', {exact: true}).waitFor();
   await page.getByRole('link', {name: 'Replay', exact: true}).click();
   await page.getByLabel('Round clock', {exact: true}).waitFor();
   await page.getByRole('link', {name: 'AI Recap', exact: true}).click();
-  await page.getByText('Test recap retained across workspace tabs.', {exact: true}).waitFor();
+  await page.getByText('Test snapshot retained across workspace tabs.', {exact: true}).waitFor();
   assert.equal(recapCalls, 1, 'Recap survives navigation without another AI request');
   await page.getByRole('link', {name: 'Insights', exact: true}).click();
   const teamPane = page.getByLabel('Insights team and player filters', {exact: true});

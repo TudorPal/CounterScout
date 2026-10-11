@@ -87,6 +87,8 @@ def main():
     demo = args.demo.resolve() if args.demo else None
     expected = (bundle / "VERSION").read_text().strip()
     assert executable.is_file()
+    assert 'MIT License' in (bundle/'LICENSE').read_text(encoding='utf-8')
+    assert (bundle/'NOTICE.md').is_file()
     check_ports()
     env = os.environ.copy()
     for key in list(env):

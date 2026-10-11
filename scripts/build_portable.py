@@ -68,6 +68,8 @@ def main():
     shutil.copytree(ROOT / "browser-extension", output / "browser-extension",
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     shutil.copy2(ROOT / "VERSION", output / "VERSION")
+    shutil.copy2(ROOT / "LICENSE", output / "LICENSE")
+    shutil.copy2(ROOT / "NOTICE.md", output / "NOTICE.md")
     shutil.copy2(ROOT / "packaging/PORTABLE-README.txt", output / "README.txt")
     shutil.copy2(ROOT / "packaging/portable.env.example", output / "portable.env.example")
     (output / "docs").mkdir(exist_ok=True)

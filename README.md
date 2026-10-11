@@ -149,6 +149,8 @@ Accessed from the Insights tab within any loaded demo:
 - **Lineup descriptions** — Natural language explanations of what each lineup does
 - **Providers** — Groq Free is recommended; OpenRouter free models are an alternative. Add/change a private key in **Settings → AI analysis** without restarting. Team reports and match snapshots never fall back to paid providers; older lineup-description features still support Anthropic.
 
+Original project code is [MIT licensed](LICENSE). Third-party assets and dependencies retain their own terms; see [licensing scope](NOTICE.md).
+
 ---
 
 ## Quick Start
