@@ -558,6 +558,8 @@ class HLTVScraper:
             return None
 
         dest.write_bytes(extracted)
+        from backend.utils.demo_catalog import DemoCatalog
+        DemoCatalog(settings.db_path.with_name("demo-catalog.db")).record(dest)
         logger.info(
             "Saved demo → %s (%.1f MB)", dest, len(extracted) / (1024 * 1024)
         )

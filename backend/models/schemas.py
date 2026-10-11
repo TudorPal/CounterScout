@@ -266,6 +266,7 @@ class DemoListEntry(BaseModel):
     match_id: Optional[int] = None
     size_bytes: int
     mtime: float             # unix seconds, for sort-by-date in the picker
+    uploaded_at: Optional[float] = None  # actual app import time; unknown on older files
     team1_name: Optional[str] = None
     team2_name: Optional[str] = None
 

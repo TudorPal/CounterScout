@@ -61,6 +61,7 @@ from backend.utils.logging_setup import install_logging
 from backend.utils.ai_cache import ai_cache
 from backend.utils.maps import KNOWN_MAPS, canonical_map_name
 from backend.utils import timeline_cache
+from backend.utils.demo_catalog import DemoCatalog
 from prometheus_fastapi_instrumentator import Instrumentator
 
 # Install the richer logging config BEFORE any logger is used below so
@@ -1646,7 +1647,9 @@ async def list_match_replay_demos():
         return []
 
     out: list[DemoListEntry] = []
-    for p in sorted(demo_dir.glob("*.dem")):
+    paths = sorted(demo_dir.glob("*.dem"))
+    upload_dates = DemoCatalog(settings.db_path.with_name("demo-catalog.db")).dates(paths)
+    for p in paths:
         stem = p.stem
         map_name = _demo_map_name(p.name)
         try:
@@ -1663,11 +1666,12 @@ async def list_match_replay_demos():
                 match_id=_parse_match_id(stem),
                 size_bytes=int(stat.st_size),
                 mtime=float(stat.st_mtime),
+                uploaded_at=upload_dates.get(p.name),
                 team1_name=str(team1.get("name") or "") if isinstance(team1, dict) else None,
                 team2_name=str(team2.get("name") or "") if isinstance(team2, dict) else None,
             )
         )
-    out.sort(key=lambda d: d.mtime, reverse=True)
+    out.sort(key=lambda d: d.uploaded_at if d.uploaded_at is not None else d.mtime, reverse=True)
     return out
 
 
@@ -1722,6 +1726,8 @@ async def upload_demo(
     except Exception as exc:
         dest.unlink(missing_ok=True)
         raise HTTPException(status_code=500, detail=f"Upload failed: {exc}")
+
+    uploaded_at = DemoCatalog(settings.db_path.with_name("demo-catalog.db")).record(dest)
 
     # A same-name upload replaces the demo, so its old cache and local roster
     # are no longer valid. Rebuild both now: manual uploads then behave just
@@ -1783,6 +1789,7 @@ async def upload_demo(
         match_id=_parse_match_id(stem),
         size_bytes=int(stat.st_size),
         mtime=float(stat.st_mtime),
+        uploaded_at=uploaded_at,
     )
 
 
@@ -1838,6 +1845,7 @@ async def delete_demo(demo_file: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="Demo not found")
     path.unlink()
+    DemoCatalog(settings.db_path.with_name("demo-catalog.db")).forget(name)
     # Also remove cached timeline if any
     cache_file = _TIMELINE_CACHE_DIR / f"{name}.json"
     cache_file.unlink(missing_ok=True)

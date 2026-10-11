@@ -351,6 +351,7 @@ export interface MatchDemoEntry {
   match_id: number | null;
   size_bytes: number;
   mtime: number;
+  uploaded_at?: number | null;
   team1_name: string | null;
   team2_name: string | null;
 }

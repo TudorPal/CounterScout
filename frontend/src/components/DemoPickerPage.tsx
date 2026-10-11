@@ -9,6 +9,7 @@
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {compareDemoDates, demoAddedDate} from '../utils/demoDates';
 import {
   Cs2PathResponse,
   MatchDemoEntry,
@@ -58,13 +59,14 @@ export default function DemoPickerPage() {
   const [teamFilter, setTeamFilter] = useState("");
   const [mapFilter, setMapFilter] = useState("");
   const [search, setSearch] = useState("");
+  const [dateOrder, setDateOrder] = useState<'newest' | 'oldest'>('newest');
   const teams = useMemo(() => Array.from(new Set((demos ?? []).flatMap(d => [d.team1_name, d.team2_name])
     .filter((n): n is string => !!n))).sort((a, b) => a.localeCompare(b)), [demos]);
   const maps = useMemo(() => Array.from(new Set((demos ?? []).map(d => d.map_name))).sort(), [demos]);
   const visibleDemos = useMemo(() => (demos ?? []).filter(d =>
     (!teamFilter || [d.team1_name, d.team2_name].includes(teamFilter)) && (!mapFilter || d.map_name === mapFilter) &&
-    `${d.demo_file} ${d.team1_name ?? ""} ${d.team2_name ?? ""} ${d.map_name}`.toLowerCase().includes(search.toLowerCase().trim())),
-    [demos, teamFilter, mapFilter, search]);
+    `${d.demo_file} ${d.team1_name ?? ""} ${d.team2_name ?? ""} ${d.map_name}`.toLowerCase().includes(search.toLowerCase().trim())).sort(compareDemoDates(dateOrder)),
+    [demos, teamFilter, mapFilter, search, dateOrder]);
   useEffect(() => { try { localStorage.setItem("replay.groupBy", groupBy); } catch {} }, [groupBy]);
 
   // Upload state
@@ -247,7 +249,7 @@ export default function DemoPickerPage() {
         m.set(key, arr);
       }
     }
-    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    return Array.from(m.entries()); // Groups follow the first sorted demo's date.
   }, [visibleDemos, groupBy, teamFilter]);
 
   return (
@@ -461,6 +463,12 @@ export default function DemoPickerPage() {
           <SearchableSelect ariaLabel="Filter replay map" value={mapFilter} allValue="" onChange={setMapFilter} noun="Maps" placeholder="Search maps…"
             options={[{value:"",label:"All maps"},...maps.map(m=>({value:m,label:m}))]} />
         </label>
+        <label className="flex flex-col gap-1 text-xs text-scout-muted">Sort demos
+          <select aria-label="Sort demos by upload date" value={dateOrder} onChange={e => setDateOrder(e.target.value as 'newest' | 'oldest')}
+            className="bg-scout-bg border border-scout-border rounded-lg px-3 py-2 text-white">
+            <option value="newest">Newest upload first</option><option value="oldest">Oldest upload first</option>
+          </select>
+        </label>
         <fieldset className="flex gap-1"><legend className="text-xs text-scout-muted mb-1">Group by</legend>
           {(["team", "map"] as const).map(g => <button key={g} aria-pressed={groupBy === g} onClick={() => setGroupBy(g)}
             className={`hud-tab ${groupBy === g ? "hud-tab-active" : "hud-tab-idle"}`}>{g === "team" ? "Team → Map" : "Map"}</button>)}
@@ -473,7 +481,7 @@ export default function DemoPickerPage() {
       {groupBy === "team" && !teamFilter && <p className="text-xs text-scout-muted">Matches appear under both participating teams. Select a team to focus its library.</p>}
       {demos && !visibleDemos.length && !!demos.length && <p className="hud-panel p-6 text-sm text-scout-muted">No demos match these filters.</p>}
       {grouped.map(([group, list]) => {
-        const subgroups = groupBy === "team" ? Array.from(new Set(list.map(d => d.map_name))).sort() : [group];
+        const subgroups = groupBy === "team" ? Array.from(new Set(list.map(d => d.map_name))) : [group];
         return <section key={group} className="hud-panel overflow-hidden">
           <header className="px-4 py-3 flex items-center gap-3 border-b border-white/5">
             {groupBy === "map" && <img src={mapIconPath(group)} alt="" className="w-7 h-7 object-contain" onError={e => { e.currentTarget.style.visibility = "hidden"; }} />}
@@ -488,8 +496,9 @@ export default function DemoPickerPage() {
               <button onClick={() => navigate(`/replay/${encodeURIComponent(d.demo_file)}`)} className="flex-1 min-w-0 text-left group" title={`Open ${d.demo_file}`}>
                 <p className="text-sm font-semibold text-white group-hover:text-scout-accent truncate">{d.team1_name && d.team2_name ? `${d.team1_name} vs ${d.team2_name}` : d.demo_file}</p>
                 <p className="text-xs text-scout-muted truncate mt-1">{d.demo_file}</p>
+                <p className="text-xs text-scout-muted mt-1">{d.uploaded_at != null ? 'Uploaded' : 'File date (upload unknown)'}: <time dateTime={new Date(demoAddedDate(d)*1000).toISOString()}>{formatDate(demoAddedDate(d))}</time></p>
               </button>
-              <span className="hidden md:block text-xs text-scout-muted text-right whitespace-nowrap">{formatDate(d.mtime)}<br />{formatBytes(d.size_bytes)}</span>
+              <span className="hidden md:block text-xs text-scout-muted text-right whitespace-nowrap">{formatBytes(d.size_bytes)}</span>
               <button onClick={() => navigate(`/replay/${encodeURIComponent(d.demo_file)}`)} className="hud-btn-primary text-xs">Watch →</button>
               <button onClick={() => setEditingDemo(d.demo_file)} aria-label={`Edit teams for ${d.demo_file}`} className="hud-btn text-xs">Edit teams</button>
               <button onClick={() => handleDelete(d.demo_file)} disabled={deleting === d.demo_file} aria-label={`Delete ${d.demo_file}`} className="hud-btn text-scout-red text-xs">{deleting === d.demo_file ? "…" : "Delete"}</button>

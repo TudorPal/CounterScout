@@ -1,0 +1,10 @@
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {createRequire} from 'node:module';
+const require=createRequire(new URL('../frontend/package.json',import.meta.url)),ts=require('typescript'),mod={exports:{}};
+new Function('module','exports',ts.transpileModule(readFileSync(new URL('../frontend/src/utils/demoDates.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS}}).outputText)(mod,mod.exports);
+const demos=[{demo_file:'old.dem',uploaded_at:10,mtime:5000},{demo_file:'new.dem',uploaded_at:20,mtime:1000},{demo_file:'legacy.dem',uploaded_at:null,mtime:15}];
+assert.deepEqual([...demos].sort(mod.exports.compareDemoDates('newest')).map(d=>d.demo_file),['new.dem','legacy.dem','old.dem']);
+assert.deepEqual([...demos].sort(mod.exports.compareDemoDates('oldest')).map(d=>d.demo_file),['old.dem','legacy.dem','new.dem']);
+assert.equal(mod.exports.demoAddedDate(demos[2]),15,'Older unknown dates use explicit file-date fallback');
+console.log('Demo dates: actual upload dates override mtimes, both sort directions and historical fallback passed.');
