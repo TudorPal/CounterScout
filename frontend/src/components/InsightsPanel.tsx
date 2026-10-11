@@ -335,7 +335,10 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   }, [timeline, identity]);
 
   // ── Selected round ──
-  const [currentRound, setCurrentRound] = useState<number>(() => timeline.rounds[0]?.num ?? 1);
+  const [currentRound, setCurrentRound] = useState<number>(() => {
+    const requested=Number(new URLSearchParams(window.location.search).get('round'));
+    return timeline.rounds.find(r=>r.num===requested)?.num ?? timeline.rounds[0]?.num ?? 1;
+  });
   const currentRoundObj = timeline.rounds.find((r) => r.num === currentRound) ?? timeline.rounds[0];
 
   // ── Mode toggle ──

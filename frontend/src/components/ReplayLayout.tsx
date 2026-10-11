@@ -164,7 +164,7 @@ export default function ReplayLayout() {
         {/* Keep recap mounted across view changes so requests/results survive
             navigation without repeating a paid AI request. */}
         <div className={location.pathname === `${basePath}/recap` ? "h-full" : "hidden"}>
-          <AiRecapPanel key={demoFile} demoFile={demoFile} />
+          <AiRecapPanel key={demoFile} demoFile={demoFile} mapName={timeline.map_name} matchInfo={matchInfo}/>
         </div>
         <Routes>
           <Route path="recap" element={null} />

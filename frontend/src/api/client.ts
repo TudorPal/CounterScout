@@ -7,6 +7,30 @@ import {startUpload} from '../utils/importActivity';
 
 const api = axios.create({ baseURL: "/api" });
 
+export type TeamAnalysisRequest = {team_name:string;map_name:string;demo_files:string[]};
+export type TeamBuy = "pistol"|"eco"|"force-buy"|"full-buy"|"mixed/unknown";
+export interface TeamTacticalRound {
+  id:string;demo_file:string;round:number;side:"T"|"CT";buy:TeamBuy;active_players:number;won:boolean;planted_site:string;plant_seconds:number|null;equipment:number;
+  routes:Array<{player:string;samples:Array<{seconds:number;location:string}>}>;
+  possible_lurks:Array<{player:string;separated_at_seconds:number[]}>;
+  utility:Array<{type:string;player:string;seconds:number;from:string;to:string;landing:number[];phase:string}>;
+}
+export interface TeamTacticalGroup {
+  side:"T"|"CT";buy:TeamBuy;rounds:number;wins:number;planted_sites:Record<string,number>;round_refs:string[];
+  common_utility:Array<{type:string;location:string;throws:number;rounds:number;players:string[];round_refs:string[]}>;
+}
+export interface TeamTacticalEvidence {
+  version:number;team:string;map:string;demos:number;rounds:TeamTacticalRound[];groups:TeamTacticalGroup[];skipped_rounds:number;limitations:string[];
+}
+export interface TeamTacticalReport {
+  overview:string;limitations:string[];
+  sections:Array<{side:"T"|"CT";buy:TeamBuy;plan:string;utility:string;possible_lurks:string;confidence:"low"|"medium"|"high";round_refs:string[]}>;
+}
+export interface TeamAiConfiguration {provider:string;model:string;configured:boolean;paid_fallback:boolean}
+export const getTeamAiConfiguration = async () => (await api.get<TeamAiConfiguration>("/ai/configuration")).data;
+export const getTeamTacticalEvidence = async (request:TeamAnalysisRequest) => (await api.post<TeamTacticalEvidence>("/ai/team/evidence",request,{timeout:180000})).data;
+export const getTeamTacticalReport = async (request:TeamAnalysisRequest) => (await api.post<{report:TeamTacticalReport;model:string;provider:string;cached:boolean}>("/ai/team/report",request,{timeout:180000})).data;
+
 export interface FaceitBridgeMatch {
   match_id: string; team_id: string; map_name: string | null; maps: string[]; status: string; finished_at: number | string | null; faceit_url: string;
   team1: {id:string;name:string;players:string[];score:number|null};

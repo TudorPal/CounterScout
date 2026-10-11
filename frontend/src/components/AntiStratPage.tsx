@@ -26,6 +26,7 @@ import Select from "./Select";
 import { useReveal } from "../hooks/useReveal";
 import SearchableSelect from "./SearchableSelect";
 import TeamScoutExplorer from "./TeamScoutExplorer";
+import TeamAiPanel from "./TeamAiPanel";
 import { buildScoutRounds, defaultScoutFilters, filterScoutTimeline, scoutTeamIds } from "../utils/teamScout";
 import type { ScoutFilters, ScoutSource } from "../utils/teamScout";
 import { roundAnchor, snapshotAt } from "../utils/replayState";
@@ -742,6 +743,7 @@ export default function AntiStratPage() {
               <p className="text-xs text-scout-muted">{scoutRounds.length} matching rounds in {selectedSources.length} selected matches. Site filters use the actual bomb plant, not a guessed attack. CT + After plant shows retake/defuse setups; T + After plant shows post-plant holds.</p>
             </section>
             {radar && <TeamScoutExplorer rounds={scoutRounds} radar={radar} teamName={teamName} postplant={filters.phase==="postplant"}/>}
+            <TeamAiPanel request={{team_name:teamName,map_name:selectedMap,demo_files:selectedSources.map(s=>s.demoFile)}}/>
             {/* ═══ Summary Banner ═══ */}
             <div className="hud-panel hud-corner p-5">
               <div className="flex items-center justify-between">
