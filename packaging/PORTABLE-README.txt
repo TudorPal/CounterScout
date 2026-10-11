@@ -39,3 +39,10 @@ Troubleshooting:
 - Logs: user-data/logs/CounterScout.log.
 - Port conflict: stop the old CounterScout/dev terminal with Ctrl+C and retry.
 - The app binds only to this computer's IPv4 loopback, not the public network.
+
+Credits and licensing:
+CounterScout started from Twoos123/cs2-meta-engine, including its initial
+structure and HLTV import foundation. See docs/credits.md, LICENSE and NOTICE.md.
+MIT covers original CounterScout contributions only, not inherited code/assets.
+Upstream permission is unresolved: this build is for local verification, not
+public redistribution or open-source signing until those rights are cleared.

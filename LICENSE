@@ -1,3 +1,8 @@
+Licensing scope: this MIT grant applies only to original contributions owned by
+CounterScout contributors. It does not license inherited cs2-meta-engine code or
+third-party assets. Upstream redistribution permission remains unresolved; see
+NOTICE.md and docs/credits.md. This is not a blanket licence for the whole app.
+
 MIT License
 
 Copyright (c) 2026 CounterScout contributors

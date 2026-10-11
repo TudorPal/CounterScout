@@ -149,7 +149,7 @@ Accessed from the Insights tab within any loaded demo:
 - **Lineup descriptions** — Natural language explanations of what each lineup does
 - **Providers** — Groq Free is recommended; OpenRouter free models are an alternative. Add/change a private key in **Settings → AI analysis** without restarting. Team reports and match snapshots never fall back to paid providers; older lineup-description features still support Anthropic.
 
-Original project code is [MIT licensed](LICENSE). Third-party assets and dependencies retain their own terms; see [licensing scope](NOTICE.md).
+Original CounterScout contributions are [MIT licensed](LICENSE), **not the inherited upstream code**. Upstream redistribution permission is unresolved; do not treat the entire app as MIT licensed. See [licensing scope](NOTICE.md) and [credits](docs/credits.md).
 
 ---
 
@@ -594,12 +594,17 @@ counterscout/
 
 ## Credits
 
-- **demoparser2** — Rust-based CS2 demo parser (LaihoE)
-- **awpy** — radar assets + calibration data
-- **CS2Callouts** — callout origin extraction
-- **HLTV.org** — match + demo sourcing + team logos
-- **FACEIT** — matchmaking demo source
-- **OpenRouter** — free AI model access
+CounterScout started from [Twoos123's CS2 Meta Engine](https://github.com/Twoos123/cs2-meta-engine). Credit goes to its author and contributors for the initial application structure and HLTV import foundation. CounterScout has since substantially evolved that foundation with parser fixes, FACEIT/ESEA demo workflows, roster naming, multi-demo scouting, redesigned workspaces, structured AI analysis and portable Windows packaging. This acknowledgement is not a claim that the upstream project lacked all FACEIT support.
+
+- [**demoparser2**](https://github.com/LaihoE/demoparser) — LaihoE's Rust CS2 demo parser.
+- [**awpy**](https://github.com/pnxenopoulos/awpy) — CS2 analysis framework and original radar/calibration foundation; current grayscale images were supplied separately.
+- [**FACEIT**](https://developers.faceit.com/) — match data and demo sources through its APIs and the browser bridge.
+- [**HLTV.org**](https://www.hltv.org/) — match/demo, roster and logo sources; access remains subject to its terms.
+- [**Liquipedia**](https://liquipedia.net/) — acknowledged by the upstream project's later catalog/photo features. This CounterScout checkout does not include those integrations; it does not claim that its current HLTV player photos are CC-BY-SA.
+- **CS2Callouts** — original callout extraction reference.
+- **Groq / OpenRouter** — optional AI providers.
+
+See [credits and provenance](docs/credits.md). Attribution does not replace permission or relicense third-party material.
 
 ---
 

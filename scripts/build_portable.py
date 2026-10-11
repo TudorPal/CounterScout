@@ -75,6 +75,7 @@ def main():
     (output / "docs").mkdir(exist_ok=True)
     shutil.copy2(ROOT / "docs/ai-team-analysis.md", output / "docs/ai-team-analysis.md")
     shutil.copy2(ROOT / "docs/windows-signing.md", output / "docs/windows-signing.md")
+    shutil.copy2(ROOT / "docs/credits.md", output / "docs/credits.md")
     release_notes = ROOT / "docs/releases" / f"v{(ROOT / 'VERSION').read_text(encoding='utf-8').strip()}.md"
     if release_notes.is_file():
         (output / 'docs/releases').mkdir(exist_ok=True)

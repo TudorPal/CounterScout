@@ -1,7 +1,17 @@
 # Licensing scope
 
-CounterScout's original project code and documentation are licensed under the
-[MIT licence](LICENSE).
+Original contributions owned by CounterScout contributors are licensed under
+the [MIT licence](LICENSE). This is not a blanket licence for the whole app.
+
+CounterScout started from [Twoos123/cs2-meta-engine](https://github.com/Twoos123/cs2-meta-engine),
+including its initial application structure and HLTV import foundation. The
+upstream repository has no explicit licence at the time of review. Copyright in
+inherited code remains with its owners; our MIT grant and acknowledgement do not
+grant redistribution or relicensing permission for that code. Obtain permission
+or an appropriate upstream licence before publishing/distributing derivative
+source or binaries, or applying for open-source signing.
+
+See [credits and provenance](docs/credits.md) for acknowledgements and source scope.
 
 Third-party libraries, runtimes, tools, icons, game artwork and imported radar/map
 images are not relicensed by this file. They retain their owners' applicable

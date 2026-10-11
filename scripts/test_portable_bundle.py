@@ -89,6 +89,7 @@ def main():
     assert executable.is_file()
     assert 'MIT License' in (bundle/'LICENSE').read_text(encoding='utf-8')
     assert (bundle/'NOTICE.md').is_file()
+    assert 'Twoos123' in (bundle/'docs/credits.md').read_text(encoding='utf-8')
     check_ports()
     env = os.environ.copy()
     for key in list(env):
