@@ -138,20 +138,17 @@ export default function PlayerDetailPage() {
   return (
     <div className="relative h-screen flex flex-col overflow-hidden bg-[#0b1118] text-scout-text">
       <AppBackdrop tone="violet" />
-      <AppHeader
-        actions={
-          <button
+      <AppHeader />
+
+      <div className="relative flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ scrollbarWidth: "thin" }}>
+        <div className="max-w-6xl mx-auto space-y-4">
+          <div><button
             onClick={() => navigate("/players")}
             className="hud-btn"
             title="Back to player list"
           >
             ← All players
-          </button>
-        }
-      />
-
-      <div className="relative flex-1 min-h-0 overflow-y-auto px-4 py-4" style={{ scrollbarWidth: "thin" }}>
-        <div className="max-w-6xl mx-auto space-y-4">
+          </button></div>
           {/* Header — team logo sits as an oversized, faded watermark
               in the background so the card reads as "this player on this
               org" without stealing attention from the name and stats. */}

@@ -26,6 +26,8 @@ try {
     else if(path==='/api/settings/cs2-path')body={configured_path:null,detected_path:'C:/Steam/game/csgo',active_path:'C:/Steam/game/csgo',link_active:false,link_name:'counterscout_demos'};
     else if(path.endsWith('/ingest/status'))body={run_id:0,last_completed_run_id:0};
     else if(path==='/api/match-replay/demos')body=[];
+    else if(path==='/api/players')body=[];
+    else if(path==='/api/player-hltv-ids')body={players:{},count:0};
     else if(path==='/api/maps')body={maps:[]};
     else if(path==='/api/demos')body={maps:[],total_demos:0};
     else if(path.startsWith('/api/lineups/'))body={lineups:[],team_filter_ready:true,teams:[]};
@@ -75,6 +77,15 @@ try {
   await page.goto('http://127.0.0.1:5189/lineups');
   const lineupPosition=await page.getByRole('button',{name:'Settings',exact:true}).boundingBox();
   assert.equal(settingsPosition.x,lineupPosition.x);assert.equal(settingsPosition.y,lineupPosition.y,'Page-specific map controls cannot move global Settings');
+  for (const route of ['/', '/lineups', '/players']) {
+    await page.goto(`http://127.0.0.1:5189${route}`);
+    const header=page.locator('header.app-header');
+    assert.ok((await header.boundingBox()).height<=66,'Desktop headers stay single-row');
+    const gear=await page.getByRole('button',{name:'Settings',exact:true}).boundingBox();
+    assert.equal(gear.x,settingsPosition.x);assert.equal(gear.y,settingsPosition.y);
+    assert.equal(await header.getByRole('button',{name:'Refresh',exact:true}).count(),0);
+    assert.equal(await header.getByRole('button',{name:'Clear',exact:true}).count(),0);
+  }
   await page.goto('http://127.0.0.1:5189/replay/test.dem/insights');
   await page.getByRole('button',{name:'Patterns',exact:true}).waitFor();
   const tools=page.getByLabel('Application tools');assert.ok((await tools.boundingBox()).x<150,'Replay app tools live in the left navigation');

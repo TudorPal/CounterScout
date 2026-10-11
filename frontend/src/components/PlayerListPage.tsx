@@ -409,10 +409,23 @@ export default function PlayerListPage() {
   return (
     <div className="relative h-screen flex flex-col overflow-hidden bg-[#0b1118] text-scout-text">
       <AppBackdrop tone="violet" />
-      <AppHeader
-        actions={
-          <>
-            <button
+      <AppHeader />
+
+      <div className="relative flex-1 min-h-0 overflow-y-auto px-4 md:px-6 pt-8 pb-12" style={{ scrollbarWidth: "thin" }}>
+        <div className="max-w-7xl mx-auto w-full space-y-8">
+          {/* ── Page hero ── */}
+          <div ref={hero.ref} className={`reveal ${hero.shown ? "in" : ""}`}>
+            <span className="section-eyebrow" style={{ color: "#d8b4fe" }}>PROFILE</span>
+            <h1 className="page-title mt-3">
+              Every player, <span className="accent">ranked</span>
+            </h1>
+            <p className="mt-3 text-sm text-scout-muted leading-relaxed max-w-2xl">
+              Cross-demo aggregated stats. Filter by role, team, or minimum
+              matches — click any row to open the full profile.
+            </p>
+          </div>
+
+          <div aria-label="Player library actions" className="flex justify-end gap-2 flex-wrap"><button
               onClick={handleResetPhotos}
               disabled={refreshing}
               className="hud-btn"
@@ -437,24 +450,7 @@ export default function PlayerListPage() {
                     : refreshPhase === "reload"
                       ? "Reloading…"
                       : "Refresh"}
-            </button>
-          </>
-        }
-      />
-
-      <div className="relative flex-1 min-h-0 overflow-y-auto px-4 md:px-6 pt-8 pb-12" style={{ scrollbarWidth: "thin" }}>
-        <div className="max-w-7xl mx-auto w-full space-y-8">
-          {/* ── Page hero ── */}
-          <div ref={hero.ref} className={`reveal ${hero.shown ? "in" : ""}`}>
-            <span className="section-eyebrow" style={{ color: "#d8b4fe" }}>PROFILE</span>
-            <h1 className="page-title mt-3">
-              Every player, <span className="accent">ranked</span>
-            </h1>
-            <p className="mt-3 text-sm text-scout-muted leading-relaxed max-w-2xl">
-              Cross-demo aggregated stats. Filter by role, team, or minimum
-              matches — click any row to open the full profile.
-            </p>
-          </div>
+            </button></div>
 
           {/* ── Top 3 podium cards (only when rating-sorted, so the visual
               ranking actually matches the list below) ── */}

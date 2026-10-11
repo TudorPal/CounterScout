@@ -9,10 +9,11 @@ import AppTools from './AppTools';
  * the user moves around the app.
  *
  * Desktop layout uses equal-width side columns, so page actions cannot
- * pull primary navigation off the visual center. Narrow screens use two rows:
+ * pull primary navigation off the visual center. Page actions live in page content.
+ * Narrow screens use two rows:
  *   LEFT   — logo + wordmark (click: home)
  *   CENTER — nav links (Lineups / Replay / Anti-Strat / Players / Import)
- *   RIGHT  — optional page-specific `actions` slot
+ *   RIGHT  — shared Settings and import notifications
  *
  * The "active page" is derived from the current route, not passed in —
  * callers never need to tell the nav which tab to highlight.
@@ -27,18 +28,17 @@ const NAV_ITEMS: { label: string; route: string }[] = [
 ];
 
 export interface AppHeaderProps {
-  actions?: ReactNode;
   /** Replace the centered nav-link cluster. Only used by ReplayLayout
    *  which puts a matchup pill in the center. */
   middle?: ReactNode;
 }
 
-export default function AppHeader({ actions, middle }: AppHeaderProps) {
+export default function AppHeader({ middle }: AppHeaderProps) {
   const navigate = useNavigate();
 
   return (
     <header className="app-header sticky top-0 z-30">
-      <div className="app-header-grid" data-has-actions={Boolean(actions)}>
+      <div className="app-header-grid">
         <button
           onClick={() => navigate("/")}
           className="app-header-brand group"
@@ -59,7 +59,6 @@ export default function AppHeader({ actions, middle }: AppHeaderProps) {
           )}
         </nav>
         <div className="app-header-actions"><AppTools/></div>
-        {actions && <div className="app-header-page-actions">{actions}</div>}
       </div>
     </header>
   );

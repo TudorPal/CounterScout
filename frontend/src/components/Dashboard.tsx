@@ -433,10 +433,19 @@ export default function Dashboard() {
   return (
     <div className="relative h-screen flex flex-col overflow-hidden bg-[#0b1118] text-scout-text">
       <AppBackdrop tone="teal" />
-      <AppHeader
-        actions={
-          <>
-            <SearchableSelect
+      <AppHeader />
+
+      <div className="relative flex-1 min-h-0 overflow-y-auto space-y-8 px-4 md:px-6 pt-8 pb-12" style={{ scrollbarWidth: "thin" }}>
+      {/* ── Page title ── */}
+      <DashboardHero
+        selectedMap={selectedMap}
+        demoCount={downloadedMaps.find((map) => map.map_name === selectedMap)?.count ?? 0}
+        lineupCount={filteredLineups.length}
+      />
+
+      <div className="max-w-7xl mx-auto w-full space-y-6">
+      <div className="hud-panel px-4 py-3 flex flex-wrap items-center gap-4">
+        <div aria-label="Lineup map controls" className="flex items-center gap-2 flex-wrap"><SearchableSelect
               value={selectedMap}
               onChange={(map) => {
                 if (analysing) return;
@@ -480,21 +489,7 @@ export default function Dashboard() {
               className="hud-btn-danger"
             >
               {clearing ? "Clearing…" : "Clear"}
-            </button>
-          </>
-        }
-      />
-
-      <div className="relative flex-1 min-h-0 overflow-y-auto space-y-8 px-4 md:px-6 pt-8 pb-12" style={{ scrollbarWidth: "thin" }}>
-      {/* ── Page title ── */}
-      <DashboardHero
-        selectedMap={selectedMap}
-        demoCount={downloadedMaps.find((map) => map.map_name === selectedMap)?.count ?? 0}
-        lineupCount={filteredLineups.length}
-      />
-
-      <div className="max-w-7xl mx-auto w-full space-y-6">
-      <div className="hud-panel px-4 py-3 flex flex-wrap items-center gap-4">
+            </button></div>
         <label className="flex items-center gap-3 text-xs text-scout-muted">
           Team
           <SearchableSelect ariaLabel="Filter lineups by team" value={selectedTeam} allValue="" onChange={setSelectedTeam}

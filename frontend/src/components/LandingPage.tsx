@@ -136,14 +136,7 @@ export default function LandingPage() {
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-[#0b1118] text-scout-text">
       {/* ── Top navigation — same component used on every page ─────── */}
-      <AppHeader
-        actions={
-          <button onClick={() => navigate("/lineups")} className="cta-btn text-xs py-2 px-4">
-            Open Dashboard
-            <span aria-hidden>→</span>
-          </button>
-        }
-      />
+      <AppHeader />
 
       {/* ── Hero ───────────────────────────────────────────────────── */}
       <Hero stats={stats} onPrimary={() => navigate("/lineups")} onSecondary={() => navigate("/replay")} />
