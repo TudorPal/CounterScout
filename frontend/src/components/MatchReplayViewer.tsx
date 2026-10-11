@@ -23,6 +23,8 @@ import {
 import ReplayTeamPanels from "./ReplayTeamPanels";
 import RoundOverview from "./RoundOverview";
 import ReplayEconomy from "./ReplayEconomy";
+import UtilityFilters, {UTILITY_TYPES} from "./UtilityFilters";
+import {utilityCategory} from "../utils/utilityFilters";
 import { matchIdentity, roundAnchor, scoreAt, snapshotAt, teamSide } from "../utils/replayState";
 import { roundClock, seekTick } from "../utils/replayNavigation";
 
@@ -266,9 +268,8 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
   };
 
   // Nade analysis filter / highlight state
-  const ALL_NADE_TYPES = ["smokegrenade", "flashbang", "hegrenade", "molotov"] as const;
   const [nadeTypeFilter, setNadeTypeFilter] = useState<Set<string>>(
-    () => new Set(ALL_NADE_TYPES),
+    () => new Set(UTILITY_TYPES),
   );
   // Heatmap + Util-Pattern overlays moved to the Insights tab — see
   // InsightsPanel's `radarMode` selector. The live replay viewer keeps only
@@ -411,7 +412,7 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
     const out: { type: string; pts: number[][]; headX: number; headY: number; thrower: string; globalIdx: number }[] = [];
     for (let gi = 0; gi < timeline.grenades.length; gi++) {
       const g = timeline.grenades[gi];
-      if (!nadeTypeFilter.has(g.type)) continue;
+      if (!nadeTypeFilter.has(utilityCategory(g.type))) continue;
       if (!g.points.length) continue;
       const first = g.points[0][0];
       const last = g.points[g.points.length - 1][0];
@@ -452,7 +453,7 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
     }[] = [];
     for (let gi = 0; gi < timeline.grenades.length; gi++) {
       const g = timeline.grenades[gi];
-      if (!nadeTypeFilter.has(g.type)) continue;
+      if (!nadeTypeFilter.has(utilityCategory(g.type))) continue;
       const dur = utilityDuration(g.type);
       if (dur === 0 || !g.points.length) continue;
       const lastPt = g.points[g.points.length - 1];
@@ -687,43 +688,7 @@ export default function MatchReplayViewer({ demoFile, timeline, radar, matchInfo
         <div className="flex-1 min-w-0 min-h-0 flex flex-col gap-1">
           <div className="hud-panel p-2 flex flex-col gap-1 flex-1 min-h-0 overflow-hidden">
           <ReplayEconomy timeline={timeline} tick={currentTick} label="Live economy" />
-          {/* Nade type filter toggles */}
-          <div className="flex items-center gap-1.5 px-1">
-            <span className="text-[11px] text-scout-muted uppercase tracking-[0.12em] mr-1">Nades</span>
-            {ALL_NADE_TYPES.map((t) => {
-              const active = nadeTypeFilter.has(t);
-              const color = GRENADE_COLOR[t] ?? "#9ca3af";
-              const label = t.replace("grenade", "");
-              return (
-                <button
-                  key={t}
-                  onClick={() => setNadeTypeFilter((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(t)) next.delete(t);
-                    else next.add(t);
-                    return next;
-                  })}
-                  className="px-2 py-0.5 rounded text-[11px] font-mono uppercase tracking-wide border transition-all"
-                  style={{
-                    borderColor: active ? color : "transparent",
-                    background: active ? `${color}20` : "transparent",
-                    color: active ? color : "#9aaabd",
-                    opacity: active ? 1 : 0.5,
-                  }}
-                >
-                  {label}
-                </button>
-              );
-            })}
-            {nadeTypeFilter.size < ALL_NADE_TYPES.length && (
-              <button
-                onClick={() => setNadeTypeFilter(new Set(ALL_NADE_TYPES))}
-                className="text-[11px] text-scout-accent/60 hover:text-scout-accent ml-1"
-              >
-                All
-              </button>
-            )}
-          </div>
+          <UtilityFilters selected={nadeTypeFilter} onChange={setNadeTypeFilter}/>
           <div className="replay-stage">
           <div
             className="replay-radar-viewport relative flex-1 min-h-0 w-full flex items-center justify-center"

@@ -19,9 +19,10 @@ import Select from "./Select";
 import SearchableSelect from "./SearchableSelect";
 import {playerSideAt, focusedRoundMatchesSide, type ReplaySideFilter, type ReplayTeamFilter} from "../utils/replayFilters";
 import RoundOverview from "./RoundOverview";
-import ReplayEconomy from "./ReplayEconomy";
+import UtilityFilters, {UTILITY_TYPES} from "./UtilityFilters";
+import {useLocation} from "react-router-dom";
 import InsightsTeamPanels from "./InsightsTeamPanels";
-import { matchesUtilityType, utilityCategory } from "../utils/utilityFilters";
+import { utilityCategory } from "../utils/utilityFilters";
 import type { LiveReplayStatus } from "./MatchReplayViewer";
 import { matchIdentity, roundAnchor, scoreAt, snapshotAt, teamSide } from "../utils/replayState";
 import {calculateReplayStats} from '../utils/replayStats';
@@ -383,20 +384,15 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   //             heatmap = aggregated nade landings across all rounds;
   //             patterns = empty radar + per-player movement trails per round
   //                        so repeated routes/throws stand out.
-  const [radarMode, setRadarMode] = useState<"round" | "heatmap" | "patterns">("round");
-  const [roundUtilityType, setRoundUtilityType] = useState("all");
-  const roundTypeFilter = useMemo(() => roundUtilityType === "all" ? undefined : new Set(
-    roundUtilityType === "molotov" ? ["molotov", "incgrenade", "incendiary"] : [roundUtilityType],
-  ), [roundUtilityType]);
+  const location=useLocation();
+  const radarMode=location.pathname.endsWith('/patterns')?'patterns':location.pathname.endsWith('/heatmap')?'heatmap':'round';
+  const [heatmapTypeFilter,setHeatmapTypeFilter]=useState<Set<string>>(()=>new Set(UTILITY_TYPES));
+  const roundTypeFilter=useMemo(()=>new Set([...heatmapTypeFilter,...(heatmapTypeFilter.has('molotov')?['incgrenade','incendiary']:[])]),[heatmapTypeFilter]);
   // Sub-filter for the radar modes — restricts heatmap/patterns to one player
   // when set. `null` = use the scoreboard's selectedSids set instead.
   const [radarPlayerFocus, setRadarPlayerFocus] = useState<string | null>(null);
   const [radarTeamFocus, setRadarTeamFocus] = useState<ReplayTeamFilter>("all");
   const [radarSideFocus, setRadarSideFocus] = useState<ReplaySideFilter>("all");
-  // Heatmap nade-type filter (HE / Smoke / Flash / Molly).
-  const [heatmapTypeFilter, setHeatmapTypeFilter] = useState<Set<string>>(
-    () => new Set(["hegrenade", "smokegrenade", "flashbang", "molotov"]),
-  );
   // Patterns playback — `playTime` is seconds since round start. Each tick
   // we sample every (round × selected-player) at roundStart + playTime so
   // you can scrub or play back and watch the same player's positions across
@@ -454,7 +450,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   useEffect(() => {
     setPinnedNadeGi(null);
     setHoverTip(null);
-  }, [currentRound, roundUtilityType, radarMode, selectedSids]);
+  }, [currentRound, heatmapTypeFilter, radarMode, selectedSids]);
   useEffect(() => {
     if (radarMode !== "patterns") setPatternPlaying(false);
   }, [radarMode]);
@@ -493,7 +489,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
       });
   }, [timeline, currentRoundObj]);
 
-  const filteredRoundNades = useMemo(() => roundNades.filter(({g}) => matchesUtilityType(g.type, roundUtilityType)), [roundNades, roundUtilityType]);
+  const filteredRoundNades = useMemo(() => roundNades.filter(({g}) => heatmapTypeFilter.has(utilityCategory(g.type))), [roundNades, heatmapTypeFilter]);
 
   // Per-grenade damage from player_hurt events. Match on:
   //   - attacker == thrower
@@ -752,7 +748,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   }, [timeline,identity,currentRound,currentRoundObj,onRoundStatus,radarMode,patternRoundFocus]);
 
   return (
-    <div className="h-full flex flex-col gap-2 p-2 overflow-hidden">
+    <div className="h-full flex flex-col gap-2 overflow-hidden">
       <RoundOverview timeline={timeline} identity={identity} selected={radarMode==='round'?currentRound:patternRoundFocus}
         onSelect={num=>{setCurrentRound(num);if(radarMode!=='round')setPatternRoundFocus(previous=>previous===num?null:num);}}
         onAll={radarMode==='round'?undefined:()=>setPatternRoundFocus(null)}
@@ -780,25 +776,8 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
 
         {/* Radar workspace: fixed team docks are siblings of the zoom viewport. */}
         <div aria-label="Insights radar workspace" className="flex-1 min-w-0 h-full hud-panel p-2 overflow-hidden flex flex-col items-center">
-          {(radarMode==='round'||patternRoundFocus!==null)&&<div className="w-full"><ReplayEconomy timeline={timeline} tick={currentRoundObj ? roundAnchor(currentRoundObj) : 0} label="Buy-phase economy" /></div>}
           <div className="flex items-center gap-2 flex-wrap mb-1 w-full">
-            {/* Mode tabs — round / heatmap / patterns */}
-            <div className="flex items-center gap-1">
-              {(["round", "heatmap", "patterns"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setRadarMode(m)}
-                  aria-pressed={radarMode === m}
-                  className={`text-[10px] uppercase tracking-[0.12em] px-2 py-0.5 rounded font-mono transition-all ${
-                    radarMode === m
-                      ? "bg-scout-accent/20 text-scout-accent border border-scout-accent/40"
-                      : "text-scout-muted hover:text-white border border-transparent"
-                  }`}
-                >
-                  {m === "round" ? "Round Utility" : m === "heatmap" ? "Heatmap" : "Patterns"}
-                </button>
-              ))}
-            </div>
+            <h2 className="text-xs font-semibold text-scout-text">{radarMode==='round'?'Round Utility':radarMode==='heatmap'?'Utility Heatmap':'Movement Patterns'}</h2>
             {radarMode === "round" && currentRoundObj && (
               <div aria-label="Round utility summary" className="ml-auto flex items-center gap-3 rounded-lg border border-scout-accent/25 bg-scout-accent/5 px-3 py-1.5 text-xs font-mono tabular-nums">
                 <span className="text-sm font-bold text-white">Round {currentRound}</span>
@@ -808,13 +787,10 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
               </div>
             )}
           </div>
-          {radarMode === "round" && <fieldset aria-label="Round utility types" className="flex items-center gap-1 flex-wrap w-full mb-1.5">
-            <legend className="sr-only">Round utility types</legend>
-            {[["all", "All utility"], ["smokegrenade", "Smoke"], ["flashbang", "Flash"], ["hegrenade", "HE"], ["molotov", "Fire"], ["decoy", "Decoy"]].map(([type, label]) => <button key={type}
-              aria-pressed={roundUtilityType === type} onClick={() => setRoundUtilityType(type)}
-              className={`hud-tab text-[10px] py-0.5 px-2 ${roundUtilityType === type ? "hud-tab-active" : "hud-tab-idle"}`}>{label}</button>)}
-            <button type="button" aria-expanded={eventsOpen} aria-controls="insights-round-events" onClick={() => setEventsOpen(v => !v)} className="hud-btn text-[10px] py-0.5 px-2 ml-auto 2xl:hidden">Events</button>
-          </fieldset>}
+          <div className="flex items-center gap-2 flex-wrap w-full mb-1.5">
+            <UtilityFilters selected={heatmapTypeFilter} onChange={setHeatmapTypeFilter}/>
+            {radarMode==='round'&&<button type="button" aria-expanded={eventsOpen} aria-controls="insights-round-events" onClick={()=>setEventsOpen(v=>!v)} className="hud-btn text-[11px] ml-auto 2xl:hidden">Events</button>}
+          </div>
           {/* Player dropdown + per-mode controls. */}
           {radarMode !== "round" && (
             <div className="flex items-center gap-2 flex-wrap mb-1.5 w-full">
@@ -843,39 +819,6 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                   })),
                 ]}
               />
-
-              {/* Nade-type filter — applies to both heatmap (which dots
-                  show) and patterns (which thrown nades render). */}
-              <div className="flex items-center gap-1">
-                {([
-                  ["hegrenade", "HE"],
-                  ["smokegrenade", "Smoke"],
-                  ["flashbang", "Flash"],
-                  ["molotov", "Molly"],
-                ] as const).map(([t, label]) => {
-                  const active = heatmapTypeFilter.has(t);
-                  const c = GRENADE_COLOR[t] ?? "#9ca3af";
-                  return (
-                    <button
-                      key={t}
-                      aria-pressed={active}
-                      onClick={() => setHeatmapTypeFilter((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(t)) next.delete(t); else next.add(t);
-                        return next;
-                      })}
-                      className="text-[10px] px-2 py-0.5 rounded font-mono border transition-all"
-                      style={{
-                        color: active ? "#0a0e18" : c,
-                        background: active ? c : "transparent",
-                        borderColor: c + (active ? "" : "60"),
-                      }}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
 
               {radarMode === "patterns" && (
                 <>

@@ -28,9 +28,11 @@ import AppTools from './AppTools';
 
 const TABS = [
   { to: "", label: "Replay", end: true },
-  { to: "insights", label: "Insights", end: false },
+  { to: "insights", label: "Round Utility", end: true },
+  { to: "insights/heatmap", label: "Utility Heatmap", end: true },
+  { to: "insights/patterns", label: "Movement Patterns", end: true },
   { to: "economy", label: "Economy", end: false },
-  { to: "heatmap", label: "Heatmap", end: false },
+  { to: "heatmap", label: "Player Positions", end: false },
   { to: "stats", label: "Stats", end: false },
   { to: "recap", label: "AI Recap", end: false },
 ] as const;
@@ -49,7 +51,7 @@ export default function ReplayLayout() {
   // time / bomb update as the user scrubs or plays.
   const [liveStatus, setLiveStatus] = useState<LiveReplayStatus | null>(null);
   const location = useLocation();
-  useEffect(() => { if (location.pathname !== basePath && location.pathname !== `${basePath}/insights`) setLiveStatus(null); }, [location.pathname, basePath]);
+  useEffect(() => { if (location.pathname !== basePath && !location.pathname.startsWith(`${basePath}/insights`)) setLiveStatus(null); }, [location.pathname, basePath]);
 
   useEffect(() => {
     if (!demoFile) return;
@@ -158,7 +160,7 @@ export default function ReplayLayout() {
           <span className="font-mono text-xl text-white font-bold tabular-nums">{firstScore} : {secondScore}</span>
           {firstSide && <span className="text-[9px] text-scout-muted">{firstSide === 2 ? "CT" : "T"}</span>}
           <span className="min-w-0 flex-1 text-sm font-semibold truncate" style={{color:firstSide ? sideColor(firstSide === 2 ? 3 : 2) : "white"}}>{matchInfo?.team2?.name ?? identity.labels[identity.team1 === 2 ? 3 : 2]}</span>
-          <span className="hidden lg:inline text-[9px] text-scout-muted">{location.pathname === basePath ? "LIVE" : location.pathname.endsWith("/insights") ? liveStatus?.round===0?'MATCH TOTALS':'ROUND RESULT' : "FINAL"}</span>
+          <span className="hidden lg:inline text-[9px] text-scout-muted">{location.pathname === basePath ? "LIVE" : location.pathname.startsWith(`${basePath}/insights`) ? liveStatus?.round===0?'MATCH TOTALS':'ROUND RESULT' : "FINAL"}</span>
         </header>
         <div className="flex-1 min-h-0 overflow-hidden">
         {/* Keep recap mounted across view changes so requests/results survive
@@ -182,7 +184,7 @@ export default function ReplayLayout() {
             }
           />
           <Route
-            path="insights"
+            path="insights/*"
             element={
               <InsightsPanel
                 onRoundStatus={setLiveStatus}

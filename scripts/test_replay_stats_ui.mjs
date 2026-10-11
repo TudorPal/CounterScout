@@ -32,7 +32,7 @@ try {
   assert.match(await page.getByText(/Rating ≈ and Swing ≈ are local estimates/).innerText(),/not official/);
   mkdirSync('.cache/ui-preview',{recursive:true});
   await page.screenshot({path:'.cache/ui-preview/retake-stats.png'});
-  await page.getByRole('link',{name:'Insights',exact:true}).click();
+  await page.getByRole('link',{name:'Round Utility',exact:true}).click();
   await page.getByText('Swing ≈',{exact:true}).first().waitFor();
   assert.equal(await page.getByRole('checkbox',{name:'Show Retake players',exact:true}).isChecked(),true);
   assert.equal(await page.getByRole('checkbox',{name:'Show 7yringe',exact:true}).isChecked(),true);

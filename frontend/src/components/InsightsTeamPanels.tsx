@@ -24,7 +24,7 @@ export default function InsightsTeamPanels({timeline, identity, round, teams, se
       const side = teamSide(timeline, identity, team, tick);
       const color = sideColor(side);
       const label = identity.labels[team];
-      return <section key={team} aria-label={`${label} player filters`} className="replay-team-panel insights-team-panel rounded-xl border border-white/10 bg-scout-bg/95 p-2 min-w-0">
+      return <section key={team} aria-label={`${label} player filters`} className="replay-team-panel insights-team-panel rounded-xl border border-white/10 bg-scout-bg/95 p-2.5 min-w-0">
         <div className="flex items-center gap-2 pb-1.5 border-b border-white/10">
           <input type="checkbox" aria-label={`Show ${label} players`} checked={players.length > 0 && players.every(p => selected.has(p.steamid))} onChange={() => onToggleTeam(team)} className="accent-scout-accent w-3.5 h-3.5 shrink-0" />
           <h2 className="text-sm font-bold truncate flex-1" style={{color}} title={label}>{label}</h2>
