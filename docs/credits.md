@@ -13,12 +13,6 @@ workspaces, evidence-based structured AI scouting, and portable Windows builds.
 The upstream project also has FACEIT features; this credit does not claim that
 all FACEIT support originated in CounterScout.
 
-**Permission status:** the reviewed upstream repository has no explicit licence.
-Its inherited code is not covered by CounterScout's MIT grant. Ask the upstream
-rights holders for an appropriate licence or written permission covering
-derivative distribution before sharing source/binaries or seeking OSS signing.
-Substantial changes and attribution alone do not resolve that permission.
-
 ## Libraries and services
 
 - [demoparser2](https://github.com/LaihoE/demoparser): LaihoE's Rust CS2 demo parser; MIT-licensed library.
