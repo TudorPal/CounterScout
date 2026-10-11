@@ -13,9 +13,9 @@ try {
   let state='initial';
   await page.route('**/api/**',async route=>{
     const path=new URL(route.request().url()).pathname;
-    const imports=[{id:'old',state:'done',demo_file:'old.dem'}];
-    if(state!=='initial'&&state!=='downloading')imports.push({id:'new',match_id:'room',state,demo_file:state==='done'?'new.dem':null});
-    const commands=state==='initial'?[]:[{id:'download',kind:'download',match_id:'room',state:state==='downloading'?'queued':state==='importing'?'running':'done',download_count:state==='done'?1:0}];
+    const imports=Array.from({length:11},(_,i)=>({id:`old-${i}`,state:'done',demo_file:`old-${i}.dem`,created:1700000000-i,team_names:[`Home ${i}`,`Away ${i}`]}));
+    if(state!=='initial'&&state!=='downloading')imports.push({id:'new',match_id:'room',state,demo_file:state==='done'?'new.dem':null,team_names:['Transpiratii','Retake']});
+    const commands=state==='initial'?[]:[{id:'download',kind:'download',match_id:'room',team_names:['Transpiratii','Retake'],state:state==='downloading'?'queued':state==='importing'?'running':'done',download_count:state==='done'?1:0}];
     const timeline={tick_rate:64,tick_max:100,map_name:'de_anubis',players:[],rounds:[{num:1,start_tick:0,freeze_end_tick:10,end_tick:100,winner:'T'}],events:[],grenades:[],positions:{}};
     const body=path.endsWith('/bridge/library')?{matches:[],commands,imports}:path.endsWith('/ingest/status')?{run_id:0,last_completed_run_id:0}:path.endsWith('/demos')?[]:path.endsWith('/timeline')?timeline:path.endsWith('/revision')?{revision:'import-menu-fixture'}:path.includes('/radars/')?{pos_x:0,pos_y:1024,scale:1}:{};
     await route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
@@ -23,10 +23,22 @@ try {
   await page.goto('http://127.0.0.1:5189/replay');
   await page.waitForTimeout(400);
   assert.equal(await page.getByText('FACEIT demo ready',{exact:true}).count(),0,'No historical notification flood');
+  await page.getByLabel('Import activity',{exact:true}).click();
+  const menu=page.getByRole('dialog',{name:'Import progress'});
+  assert.equal(await menu.locator('[data-import-entry]').count(),5);
+  await menu.getByText('Home 0 vs Away 0',{exact:true}).waitFor();
+  assert.ok(await menu.evaluate(el=>el.scrollHeight<=el.clientHeight),'Five recent imports fit without a scrollbar');
+  await menu.getByRole('button',{name:'Next imports page'}).click();
+  assert.equal(await menu.locator('[data-import-entry]').count(),5);
+  await menu.getByRole('button',{name:'Next imports page'}).click();
+  assert.equal(await menu.locator('[data-import-entry]').count(),1);
+  assert.equal(await menu.getByRole('button',{name:'Next imports page'}).isDisabled(),true);
+  await page.keyboard.press('Escape');
   state='downloading';
   await page.getByLabel('Import activity',{exact:true}).waitFor();
   await page.getByLabel('Import activity',{exact:true}).click();
   await page.getByText('Waiting for extension…',{exact:true}).waitFor();
+  await menu.getByText('Transpiratii vs Retake',{exact:true}).waitFor();
   state='importing';
   await page.getByText('Analysing FACEIT demo',{exact:true}).waitFor();
   await page.getByRole('link',{name:'Anti-Strat',exact:true}).click();

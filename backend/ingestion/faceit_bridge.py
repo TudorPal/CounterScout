@@ -467,10 +467,18 @@ def install_faceit_bridge(app, upload_demo, store=None):
         with store.connect() as db:
             store.reconcile_imports(db)
             store.expire(db)
+            def history_entry(row):
+                # Status polling needs labels, not the whole catalog or rosters.
+                entry = dict(row)
+                match = json.loads(entry.pop("match_data") or "{}")
+                entry["team_names"] = [match[slot]["name"] for slot in ("team1", "team2")
+                                       if (match.get(slot) or {}).get("name")]
+                return entry
             return {"matches": [{**json.loads(r["data"]), "team_id": r["team_id"]} for r in db.execute("SELECT * FROM matches ORDER BY updated DESC LIMIT 200")] if include_matches else [],
                     "commands": [{"id": r["id"], "state": r["state"], "error": r["error"], "created": r["created"], "stage": r["stage"],
-                                  **json.loads(r["data"])} for r in db.execute("SELECT * FROM commands ORDER BY created DESC LIMIT 30")],
-                    "imports": [dict(r) for r in db.execute("SELECT * FROM imports ORDER BY created DESC LIMIT 30")]}
+                                  "team_names": r["team_names"], **json.loads(r["data"])} for r in
+                                 (history_entry(row) for row in db.execute("SELECT c.*, m.data AS match_data FROM commands c LEFT JOIN matches m ON json_extract(c.data, '$.match_id')=m.id ORDER BY c.created DESC LIMIT 30"))],
+                    "imports": [history_entry(r) for r in db.execute("SELECT i.*, m.data AS match_data FROM imports i LEFT JOIN matches m ON i.match_id=m.id ORDER BY i.created DESC LIMIT 30")]}
 
     async def import_file(identifier, req, source):
         async with import_lock:

@@ -82,6 +82,18 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(light['commands'],full['commands'])
         self.assertEqual(light['imports'],full['imports'])
 
+    def test_status_history_includes_team_names_without_full_matches(self):
+        self.post('/matches', {'team_id': TEAM, 'matches': [metadata()]})
+        self.store.queue({'kind': 'download', 'match_id': MATCH})
+        with self.store.connect() as db:
+            db.execute("INSERT INTO imports (id,match_id,state,created) VALUES ('history',?,'queued',?)", (MATCH,time.time()))
+        light = self.client.get(PREFIX+'/library?include_matches=false').json()
+        self.assertEqual(light['matches'], [])
+        self.assertEqual(light['commands'][0]['team_names'], ['Transpiratii', 'Panico eSports'])
+        self.assertEqual(light['imports'][0]['team_names'], ['Transpiratii', 'Panico eSports'])
+        self.assertNotIn('match_data', light['imports'][0])
+        self.assertNotIn('players', light['imports'][0])
+
     def test_reviewed_names_survive_resync_and_are_used_for_download_import(self):
         self.post("/matches", {"team_id": TEAM, "matches": [metadata()],
                   "reviewed_names": {MATCH: {"faction1": "My reviewed team"}}})

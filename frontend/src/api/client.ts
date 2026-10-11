@@ -41,8 +41,8 @@ export interface FaceitBridgeMatch {
 }
 export interface FaceitBridgeLibrary {
   matches: FaceitBridgeMatch[];
-  commands: Array<{id:string;state:string;error:string|null;kind?:"team"|"search"|"download";query?:string;match_id?:string;download_count?:number;expected_count?:number;stage?:string;created?:number;resolved_by_import?:boolean;results?:Array<{id:string;name:string;nickname:string;game:string;members:string;url:string}>}>;
-  imports: Array<{id:string;match_id:string;state:string;error:string|null;demo_file:string|null;created?:number}>;
+  commands: Array<{id:string;state:string;error:string|null;kind?:"team"|"search"|"download";query?:string;match_id?:string;download_count?:number;expected_count?:number;stage?:string;created?:number;resolved_by_import?:boolean;team_names?:string[];results?:Array<{id:string;name:string;nickname:string;game:string;members:string;url:string}>}>;
+  imports: Array<{id:string;match_id:string;state:string;error:string|null;demo_file:string|null;created?:number;team_names?:string[]}>;
 }
 export const getFaceitBridgeSetup = async () => (await api.get<{token:string;downloads_dir:string;extension_path:string;last_seen:string|null;extension_version?:string;required_version:string;automation_ready:boolean}>("/ingest/faceit/bridge/setup")).data;
 export const configureFaceitDownloads = async (downloads_dir:string) => (await api.put("/ingest/faceit/bridge/setup",{downloads_dir})).data;
@@ -611,7 +611,7 @@ export const uploadDemo = async (
   form.append("file", file);
   if (teamNames?.team1?.trim()) form.append("team1_name", teamNames.team1.trim());
   if (teamNames?.team2?.trim()) form.append("team2_name", teamNames.team2.trim());
-  const activity = startUpload(file.name);
+  const activity = startUpload(file.name, [teamNames?.team1,teamNames?.team2].filter((name): name is string => Boolean(name?.trim())));
   try {
   const { data } = await api.post<MatchDemoEntry>("/match-replay/upload", form, {
     headers: { "Content-Type": "multipart/form-data" },
@@ -622,7 +622,7 @@ export const uploadDemo = async (
     timeout: 600000, // 10 min for large demos
   });
   await invalidateReplay(data.demo_file);
-  activity.done(data.demo_file);
+  activity.done(data.demo_file, undefined, [data.team1_name,data.team2_name].filter((name): name is string=>Boolean(name)));
   return data;
   } catch (error) { activity.failed(error); throw error; }
 };
@@ -649,7 +649,8 @@ export const uploadDemos = async (
     timeout: 600000,
   });
   await Promise.all(data.uploaded.map(demo => invalidateReplay(demo.demo_file)));
-  activity.done(data.uploaded[0]?.demo_file, data.failed.length ? data.failed.map(item => `${item.file}: ${item.error}`).join('; ') : undefined);
+  activity.done(data.uploaded[0]?.demo_file, data.failed.length ? data.failed.map(item => `${item.file}: ${item.error}`).join('; ') : undefined,
+    [...new Set(data.uploaded.flatMap(item=>[item.team1_name,item.team2_name]).filter((name): name is string=>Boolean(name)))]);
   return data;
   } catch (error) { activity.failed(error); throw error; }
 };
