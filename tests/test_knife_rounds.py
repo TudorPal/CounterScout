@@ -89,6 +89,29 @@ class KnifeRoundTests(unittest.TestCase):
         self.assertEqual(len(bundle["grenades"]), 1)
         self.assertEqual(bundle["grenades"][0]["points"][0][0], 9000)
 
+    def test_stats_events_include_weapon_damage_and_flash_assist(self):
+        parser = self.parser()
+        original = parser.parse_event.side_effect
+        def events(name, **kwargs):
+            if name == "player_hurt":
+                return pd.DataFrame([
+                    {"tick": 9000, "weapon": "ak47", "attacker_steamid": "123", "user_steamid": "456", "dmg_health": 40, "health": 60},
+                    {"tick": 9001, "weapon": "hegrenade", "attacker_steamid": "123", "user_steamid": "456", "dmg_health": 20, "health": 40},
+                ])
+            if name == "player_death":
+                return pd.concat([original(name), pd.DataFrame([{"tick": 9002, "weapon": "ak47", "attacker_steamid": "123", "user_steamid": "456", "assister_steamid": "789", "assistedflash": True}])], ignore_index=True)
+            return original(name)
+        parser.parse_event.side_effect = events
+        with patch("demoparser2.DemoParser", return_value=parser):
+            bundle = extract_match_timeline(Path("test.dem"))
+        damage = next(e for e in bundle["events"] if e["type"] == "damage")
+        self.assertEqual(damage["data"]["dmg"], "40")
+        self.assertEqual(damage["data"]["health"], "60")
+        self.assertTrue(any(e["type"] == "hurt" for e in bundle["events"]))
+        kill = next(e for e in bundle["events"] if e["tick"] == 9002)
+        self.assertEqual(kill["data"]["assister"], "789")
+        self.assertEqual(kill["data"]["assistedflash"], "True")
+
     def test_lineup_parser_uses_same_live_round_numbers_and_cutoff(self):
         parser = self.parser()
         dp = DemoParser()

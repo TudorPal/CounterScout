@@ -511,7 +511,7 @@ export default function PlayerListPage() {
                           {p.rating.toFixed(2)}
                         </div>
                         <div className="text-[9px] font-mono text-scout-muted uppercase tracking-[0.2em]">
-                          Rating
+                          Profile score ≈
                         </div>
                       </div>
                     </div>
@@ -591,7 +591,7 @@ export default function PlayerListPage() {
                 onChange={(v) => setSortKey(v as SortKey)}
                 minWidth={130}
                 options={[
-                  { value: "rating",  label: "Rating" },
+                  { value: "rating",  label: "Profile score ≈" },
                   { value: "kd",      label: "K/D" },
                   { value: "kills",   label: "Kills" },
                   { value: "hs",      label: "HS%" },
@@ -641,7 +641,7 @@ export default function PlayerListPage() {
                     <th className="px-3 py-3 text-left font-semibold">Player</th>
                     <th className="px-3 py-3 text-left font-semibold">Team</th>
                     <th className="px-3 py-3 text-center font-semibold">Role</th>
-                    <th className="px-3 py-3 text-right font-semibold">Rating</th>
+                    <th className="px-3 py-3 text-right font-semibold" title="Legacy local cross-demo performance proxy, not an official HLTV rating">Profile score ≈</th>
                     <th className="px-3 py-3 text-right font-semibold">K/D</th>
                     <th className="px-3 py-3 text-right font-semibold">K</th>
                     <th className="px-3 py-3 text-right font-semibold">D</th>

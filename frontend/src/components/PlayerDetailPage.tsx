@@ -207,7 +207,7 @@ export default function PlayerDetailPage() {
             </div>
             <div className="flex items-center gap-3 relative z-10">
               <div className="text-right">
-                <p className="text-[10px] text-scout-muted uppercase tracking-[0.18em]">Rating</p>
+                <p className="text-[10px] text-scout-muted uppercase tracking-[0.18em]" title="Legacy local cross-demo performance proxy, not an official HLTV rating">Profile score ≈</p>
                 <p className="text-3xl font-bold font-mono text-scout-accent">{s.rating.toFixed(2)}</p>
               </div>
             </div>

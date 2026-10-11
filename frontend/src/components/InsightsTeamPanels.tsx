@@ -1,6 +1,7 @@
 import type { MatchTimeline, TimelineRound } from "../api/client";
 import type { PlayerRoundStats } from "./InsightsPanel";
 import { economyAt, money, roundAnchor, scoreAt, sideColor, snapshotAt, teamSide, type MatchIdentity } from "../utils/replayState";
+import {ESTIMATE_DESCRIPTION} from '../utils/replayStats';
 
 interface Props {
   timeline: MatchTimeline;
@@ -32,7 +33,7 @@ export default function InsightsTeamPanels({timeline, identity, round, teams, se
         </div>
         <p className="text-[10px] font-mono text-scout-muted my-1 truncate">Cash {money(economy[side].known ? economy[side].cash : null)} · equip {money(economy[side].equipment)}</p>
         <div className="grid gap-1 text-[11px] text-scout-muted uppercase px-1 pb-1" style={{gridTemplateColumns: columns}}>
-          <span /><span>Player</span><span className="text-right">Swing</span><span className="text-right">DMG</span><span className="text-right">K/D/A</span>
+          <span /><span>Player</span><span className="text-right" title={ESTIMATE_DESCRIPTION}>Swing ≈</span><span className="text-right">DMG</span><span className="text-right">K/D/A</span>
         </div>
         {players.map(p => {
           const checked = selected.has(p.steamid);

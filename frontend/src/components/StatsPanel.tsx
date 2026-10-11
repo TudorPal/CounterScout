@@ -5,6 +5,8 @@
  */
 import { useMemo, useState } from "react";
 import { MatchInfoResponse, MatchTimeline } from "../api/client";
+import {matchIdentity} from '../utils/replayState';
+import {calculateReplayStats, ESTIMATE_DESCRIPTION} from '../utils/replayStats';
 
 interface Props {
   timeline: MatchTimeline;
@@ -33,25 +35,13 @@ interface PlayerStats {
   molovsThrown: number;
   roundsAlive: number; // rounds survived
   totalRounds: number;
+  assists: number; adr: number; kast: number; rating: number | null; swingPct: number; participated: number;
 }
 
 export default function StatsPanel({ timeline, matchInfo }: Props) {
   const [expandedPlayer, setExpandedPlayer] = useState<string | null>(null);
-
-  const teamNames = useMemo(() => {
-    if (matchInfo?.team1 && matchInfo?.team2) {
-      const tPlayers = new Set(
-        timeline.players.filter((p) => p.team_num === 2).map((p) => p.name.toLowerCase()),
-      );
-      const team1Players = (matchInfo.team1.players ?? []).map((n) => n.toLowerCase());
-      const team1IsT = team1Players.some((n) => tPlayers.has(n));
-      return {
-        2: team1IsT ? matchInfo.team1.name : matchInfo.team2.name,
-        3: team1IsT ? matchInfo.team2.name : matchInfo.team1.name,
-      };
-    }
-    return { 2: "Terrorists", 3: "Counter-Terrorists" };
-  }, [matchInfo, timeline]);
+  const identity = useMemo(() => matchIdentity(timeline, matchInfo), [timeline, matchInfo]);
+  const shared = useMemo(() => calculateReplayStats(timeline, identity), [timeline, identity]);
 
   const stats = useMemo<PlayerStats[]>(() => {
     const map = new Map<string, PlayerStats>();
@@ -59,7 +49,7 @@ export default function StatsPanel({ timeline, matchInfo }: Props) {
       map.set(p.steamid, {
         steamid: p.steamid,
         name: p.name,
-        team: p.team_num,
+        team: identity.members[p.steamid],
         kills: 0, deaths: 0, hsKills: 0,
         wallbangKills: 0, noscopeKills: 0, smokeKills: 0, blindKills: 0,
         openingKills: 0, openingDeaths: 0,
@@ -67,6 +57,7 @@ export default function StatsPanel({ timeline, matchInfo }: Props) {
         multiKills: { "2k": 0, "3k": 0, "4k": 0, "5k": 0 },
         smokesThrown: 0, flashesThrown: 0, hesThrown: 0, molovsThrown: 0,
         roundsAlive: 0, totalRounds: timeline.rounds.length,
+        assists: 0, adr: 0, kast: 0, rating: null, swingPct: 0, participated: 0,
       });
     }
 
@@ -91,6 +82,7 @@ export default function StatsPanel({ timeline, matchInfo }: Props) {
     for (const evt of timeline.events) {
       if (evt.type !== "death") continue;
       const rnd = tickToRound(evt.tick);
+      if (!rnd) continue; // Warmup, between-round and post-match deaths are not stats.
       const attacker = evt.data.attacker;
       const victim = evt.data.victim;
 
@@ -99,7 +91,7 @@ export default function StatsPanel({ timeline, matchInfo }: Props) {
       if (victimStats) victimStats.deaths++;
 
       // Kills (ignore suicides/team kills for stats)
-      if (attacker && attacker !== victim) {
+      if (attacker && attacker !== victim && identity.members[attacker] !== identity.members[victim]) {
         const attackerStats = map.get(attacker);
         if (attackerStats) {
           attackerStats.kills++;
@@ -157,26 +149,13 @@ export default function StatsPanel({ timeline, matchInfo }: Props) {
       else if (g.type === "molotov" || g.type === "incgrenade") s.molovsThrown++;
     }
 
-    // Rounds survived: check if player is alive at round end tick
-    for (const r of timeline.rounds) {
-      for (const p of timeline.players) {
-        const samples = timeline.positions[p.steamid];
-        if (!samples || samples.length === 0) continue;
-        // Find sample nearest to round end
-        let nearest = samples[0];
-        for (const s of samples) {
-          if (Math.abs(s.t - r.end_tick) < Math.abs(nearest.t - r.end_tick)) nearest = s;
-          if (s.t > r.end_tick) break;
-        }
-        if (nearest.alive) {
-          const ps = map.get(p.steamid);
-          if (ps) ps.roundsAlive++;
-        }
-      }
-    }
-
-    return Array.from(map.values());
-  }, [timeline]);
+    return Array.from(map.values()).map(p => {
+      const s = shared.playerTotals.find(s => s.steamid === p.steamid)!;
+      return {...p, kills:s.kills, deaths:s.deaths, hsKills:s.hsk, assists:s.assists,
+        roundsAlive:s.survived, participated:s.rounds, adr:timeline.rounds.length?s.dmg/timeline.rounds.length:0,
+        kast:timeline.rounds.length?100*s.kast/timeline.rounds.length:0, rating:s.rating, swingPct:s.swingPct};
+    });
+  }, [timeline, identity, shared]);
 
   // Sort by kills desc within each team
   const teamPlayers = (team: number) =>
@@ -197,18 +176,24 @@ export default function StatsPanel({ timeline, matchInfo }: Props) {
             {teamLabel}
           </span>
           <span className="text-sm font-semibold text-white">
-            {teamNames[team as 2 | 3]}
+            {identity.labels[team]}
           </span>
         </div>
-        <div className="text-[11px]">
+        <div className="text-[11px] overflow-x-auto">
+        <div className="min-w-[1100px]">
           {/* Header row */}
           <div
             className="grid text-scout-muted uppercase tracking-[0.08em] border-b border-scout-border/30"
-            style={{ gridTemplateColumns: "2fr repeat(11, 1fr)" }}
+            style={{ gridTemplateColumns: "2fr repeat(16, 1fr)" }}
           >
             <div className="px-3 py-2 font-medium text-left">Player</div>
             <div className="px-2 py-2 font-medium text-center">K</div>
             <div className="px-2 py-2 font-medium text-center">D</div>
+            <div className="px-2 py-2 font-medium text-center">A</div>
+            <div className="px-2 py-2 font-medium text-center">ADR</div>
+            <div className="px-2 py-2 font-medium text-center">KAST</div>
+            <div className="px-2 py-2 font-medium text-center" title={ESTIMATE_DESCRIPTION}>Rating ≈</div>
+            <div className="px-2 py-2 font-medium text-center" title={ESTIMATE_DESCRIPTION}>Swing ≈</div>
             <div className="px-2 py-2 font-medium text-center">+/-</div>
             <div className="px-2 py-2 font-medium text-center">HS%</div>
             <div className="px-2 py-2 font-medium text-center">FK</div>
@@ -235,10 +220,15 @@ export default function StatsPanel({ timeline, matchInfo }: Props) {
                   onClick={() => setExpandedPlayer(isExpanded ? null : p.steamid)}
                 >
                   {/* Main row */}
-                  <div className="grid" style={{ gridTemplateColumns: "2fr repeat(11, 1fr)" }}>
-                    <div className="px-3 py-2 font-semibold text-white truncate">{p.name}</div>
+                  <div className="grid" style={{ gridTemplateColumns: "2fr repeat(16, 1fr)" }}>
+                    <div className="px-3 py-2 font-semibold text-white truncate" title={`${p.name}: present/alive in ${p.participated} of ${p.totalRounds} rounds`}>{p.name}</div>
                     <div className="px-2 py-2 text-center font-mono font-bold text-white">{p.kills}</div>
                     <div className="px-2 py-2 text-center font-mono text-gray-400">{p.deaths}</div>
+                    <div className="px-2 py-2 text-center font-mono text-gray-300">{p.assists}</div>
+                    <div className="px-2 py-2 text-center font-mono text-gray-300">{shared.hasRealAggregates ? p.adr.toFixed(1) : '—'}</div>
+                    <div className="px-2 py-2 text-center font-mono text-gray-300">{p.kast.toFixed(0)}%</div>
+                    <div className="px-2 py-2 text-center font-mono text-scout-accent" title={ESTIMATE_DESCRIPTION}>{p.rating?.toFixed(2) ?? '—'}</div>
+                    <div className={`px-2 py-2 text-center font-mono ${p.swingPct>=0?'text-scout-green':'text-scout-red'}`} title={ESTIMATE_DESCRIPTION}>{p.swingPct>=0?'+':''}{p.swingPct.toFixed(2)}%</div>
                     <div className={`px-2 py-2 text-center font-mono font-bold ${diff > 0 ? "text-scout-green" : diff < 0 ? "text-scout-red" : "text-gray-400"}`}>
                       {diff > 0 ? `+${diff}` : diff}
                     </div>
@@ -342,6 +332,7 @@ export default function StatsPanel({ timeline, matchInfo }: Props) {
               );
           })}
           </div>
+          </div>
         </div>
     );
   };
@@ -351,8 +342,9 @@ export default function StatsPanel({ timeline, matchInfo }: Props) {
       <h2 className="text-xs text-scout-muted uppercase tracking-[0.15em]">
         Player Statistics · {timeline.rounds.length} rounds
       </h2>
-      {renderTeamTable(2)}
-      {renderTeamTable(3)}
+      <p className="text-xs text-scout-muted">Rating ≈ and Swing ≈ are local estimates inspired by HLTV 3.0, not official HLTV or FACEIT values. Averages use all {timeline.rounds.length} match rounds. Assists use 40 enemy damage or a flash assist on new parses.</p>
+      {renderTeamTable(identity.team1)}
+      {renderTeamTable(identity.team1===2?3:2)}
     </div>
   );
 }

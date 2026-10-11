@@ -61,7 +61,7 @@ const features: Feature[] = [
     title: "Player Profiles",
     eyebrow: "Profile",
     description:
-      "Cross-demo aggregated stats. Rating, role inference, per-map and per-side splits.",
+      "Cross-demo aggregated stats. Local performance score, role inference, per-map and per-side splits.",
     route: "/players",
     color: "#afa5df",
     colorRgb: "192, 132, 252",

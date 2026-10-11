@@ -24,6 +24,7 @@ import InsightsTeamPanels from "./InsightsTeamPanels";
 import { matchesUtilityType, utilityCategory } from "../utils/utilityFilters";
 import type { LiveReplayStatus } from "./MatchReplayViewer";
 import { matchIdentity, roundAnchor, scoreAt, snapshotAt, teamSide } from "../utils/replayState";
+import {calculateReplayStats} from '../utils/replayStats';
 
 const GRENADE_COLOR: Record<string, string> = {
   smokegrenade: "#cbd5e1",
@@ -168,8 +169,8 @@ export interface PlayerRoundStats {
   openingKills: number;
   openingDeaths: number;
   survived: number;
-  swing: number;         // signed contribution (unit-less)
-  swingPct: number;      // relative % vs team avg
+  swing: number;         // local signed win-probability contribution
+  swingPct: number;      // local estimate, percentage points per match round
   hasRealAggregates: boolean;
 }
 
@@ -330,157 +331,8 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
 
   // ── Per-round per-player stats using real aggregate diffs when available ──
   const { perPlayerRoundStats, playerTotals, hasRealAggregates } = useMemo(() => {
-    const totals = new Map<string, PlayerRoundStats>();
-    const byRound: Record<number, Record<string, PlayerRoundStats>> = {};
-    let anyReal = false;
-
-    for (const p of timeline.players) {
-      const t = sidToTeam[p.steamid];
-      totals.set(p.steamid, {
-        steamid: p.steamid, name: p.name, team: t,
-        rounds: 0, kills: 0, deaths: 0, assists: 0,
-        dmg: 0, utildmg: 0, flashed: 0, hsk: 0,
-        openingKills: 0, openingDeaths: 0, survived: 0,
-        swing: 0, swingPct: 0, hasRealAggregates: false,
-      });
-    }
-
-    // Build previous-round snapshot for each player (start from zeros)
-    const prevSnap = new Map<string, {
-      dmg: number; utildmg: number; ast: number; hsk: number;
-      flashed: number; ktot: number; dtot: number; atime: number;
-    }>();
-    for (const p of timeline.players) {
-      prevSnap.set(p.steamid, {
-        dmg: 0, utildmg: 0, ast: 0, hsk: 0, flashed: 0, ktot: 0, dtot: 0, atime: 0,
-      });
-    }
-
-    for (const r of timeline.rounds) {
-      byRound[r.num] = {};
-      // Opening kill in round
-      let roundFirstKill = false;
-
-      // Kills / deaths / openings (events are authoritative even without aggregates)
-      const perPlayerKills = new Map<string, number>();
-      const perPlayerDeaths = new Map<string, number>();
-      const perPlayerOpens = new Map<string, number>();
-      const perPlayerOpenD = new Map<string, number>();
-      for (const e of timeline.events) {
-        if (e.type !== "death") continue;
-        if (e.tick < r.start_tick || e.tick > r.end_tick) continue;
-        const att = e.data.attacker;
-        const vic = e.data.victim;
-        if (vic) perPlayerDeaths.set(vic, (perPlayerDeaths.get(vic) ?? 0) + 1);
-        if (att && vic && att !== vic) {
-          perPlayerKills.set(att, (perPlayerKills.get(att) ?? 0) + 1);
-          if (!roundFirstKill) {
-            roundFirstKill = true;
-            perPlayerOpens.set(att, (perPlayerOpens.get(att) ?? 0) + 1);
-            if (vic) perPlayerOpenD.set(vic, (perPlayerOpenD.get(vic) ?? 0) + 1);
-          }
-        }
-      }
-
-      // Aggregate diffs
-      for (const p of timeline.players) {
-        const endSample = sampleAtTick(timeline.positions[p.steamid], r.end_tick);
-        const prev = prevSnap.get(p.steamid)!;
-        const curr = {
-          dmg: endSample?.dmg ?? prev.dmg,
-          utildmg: endSample?.utildmg ?? prev.utildmg,
-          ast: endSample?.ast ?? prev.ast,
-          hsk: endSample?.hsk ?? prev.hsk,
-          flashed: endSample?.flashed ?? prev.flashed,
-          ktot: endSample?.ktot ?? prev.ktot,
-          dtot: endSample?.dtot ?? prev.dtot,
-          atime: endSample?.atime ?? prev.atime,
-        };
-        const hasReal = endSample?.dmg !== undefined;
-        if (hasReal) anyReal = true;
-
-        const dmg = Math.max(0, curr.dmg - prev.dmg);
-        const utildmg = Math.max(0, curr.utildmg - prev.utildmg);
-        const ast = Math.max(0, curr.ast - prev.ast);
-        const hsk = Math.max(0, curr.hsk - prev.hsk);
-        const flashed = Math.max(0, curr.flashed - prev.flashed);
-
-        const kills = perPlayerKills.get(p.steamid) ?? 0;
-        const deaths = perPlayerDeaths.get(p.steamid) ?? 0;
-        const openK = perPlayerOpens.get(p.steamid) ?? 0;
-        const openD = perPlayerOpenD.get(p.steamid) ?? 0;
-        const survived = endSample?.alive ? 1 : 0;
-
-        const stat: PlayerRoundStats = {
-          steamid: p.steamid, name: p.name, team: sidToTeam[p.steamid],
-          rounds: 1, kills, deaths, assists: ast,
-          dmg, utildmg, flashed, hsk,
-          openingKills: openK, openingDeaths: openD, survived,
-          swing: 0, swingPct: 0, hasRealAggregates: hasReal,
-        };
-        // Swing formula (uses real DMG when present, falls back to kills weight otherwise)
-        stat.swing = (
-          1.0 * kills
-          + (hasReal ? 0.004 * dmg : 0)
-          + 0.3 * openK
-          + 0.2 * Math.max(0, kills - 2)
-          - 0.5 * deaths
-          + 0.25 * survived
-          + 0.05 * ast
-        );
-        byRound[r.num][p.steamid] = stat;
-
-        // Accumulate totals
-        const tot = totals.get(p.steamid)!;
-        tot.rounds += 1;
-        tot.kills += kills;
-        tot.deaths += deaths;
-        tot.assists += ast;
-        tot.dmg += dmg;
-        tot.utildmg += utildmg;
-        tot.flashed += flashed;
-        tot.hsk += hsk;
-        tot.openingKills += openK;
-        tot.openingDeaths += openD;
-        tot.survived += survived;
-        tot.swing += stat.swing;
-        if (hasReal) tot.hasRealAggregates = true;
-
-        prevSnap.set(p.steamid, curr);
-      }
-
-      // Normalize per-round swing to % relative to team average
-      for (const team of [2, 3]) {
-        const teamPlayers = Object.values(byRound[r.num]).filter((s) => s.team === team);
-        if (teamPlayers.length === 0) continue;
-        const teamAvg = teamPlayers.reduce((sum, s) => sum + s.swing, 0) / teamPlayers.length;
-        const teamAbs = Math.max(1, Math.abs(teamAvg) + 1);
-        for (const s of teamPlayers) {
-          s.swingPct = ((s.swing - teamAvg) / teamAbs) * 100;
-        }
-      }
-    }
-
-    // Match-level swing % — average the per-round deltas
-    for (const tot of totals.values()) {
-      // Average per-round swing delta across all rounds where this player participated
-      let swingPctSum = 0, roundCount = 0;
-      for (const rn of Object.keys(byRound)) {
-        const s = byRound[Number(rn)][tot.steamid];
-        if (s && s.rounds > 0) {
-          swingPctSum += s.swingPct;
-          roundCount++;
-        }
-      }
-      tot.swingPct = roundCount > 0 ? swingPctSum / roundCount : 0;
-    }
-
-    return {
-      perPlayerRoundStats: byRound,
-      playerTotals: Array.from(totals.values()),
-      hasRealAggregates: anyReal,
-    };
-  }, [timeline, sidToTeam]);
+    return calculateReplayStats(timeline, identity);
+  }, [timeline, identity]);
 
   // ── Selected round ──
   const [currentRound, setCurrentRound] = useState<number>(() => timeline.rounds[0]?.num ?? 1);

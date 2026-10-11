@@ -50,7 +50,7 @@ logger = logging.getLogger(__name__)
 # v7 recognises bayonet knife kills and trims the restart/warmup before live play.
 # v6 omits non-finite position/projectile coordinates (NaN is not valid JSON).
 # v8 resolves bombsites from named navigation zones, never entity-ID order.
-TIMELINE_CACHE_VERSION = 8
+TIMELINE_CACHE_VERSION = 9
 
 
 def _bombsite_label(row: dict) -> str:
@@ -1315,6 +1315,8 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
             {
                 "attacker": _str(r.get("attacker_steamid")),
                 "victim": _str(r.get("user_steamid")),
+                "assister": _str(r.get("assister_steamid")),
+                "assistedflash": _str(r.get("assistedflash")),
                 "weapon": _str(r.get("weapon")),
                 "headshot": _str(r.get("headshot")),
                 "penetrated": _str(r.get("penetrated")),
@@ -1336,20 +1338,21 @@ def extract_match_timeline(demo_path: Path, decimation: int = 8) -> dict:
             },
         ),
     )
-    # Utility damage — only push hurt events caused by HE/molly/inferno so we
-    # can attach damage labels to the corresponding grenade on the map.
+    # Keep utility hurt events for grenade labels; include weapon damage too
+    # for capped ADR, 40-damage assists and local win-probability estimates.
     _UTIL_HURT_WEAPONS = {"hegrenade", "molotov", "inferno", "incgrenade"}
     _push_events(
         "player_hurt",
         lambda r: (
-            ("hurt", {
+            ("hurt" if _str(r.get("weapon")) in _UTIL_HURT_WEAPONS else "damage", {
                 "attacker": _str(r.get("attacker_steamid")),
                 "victim": _str(r.get("user_steamid")),
                 "weapon": _str(r.get("weapon")),
                 "dmg": _str(r.get("dmg_health")),
+                "health": _str(r.get("health")),
                 "x": _str(r.get("user_X", "")),
                 "y": _str(r.get("user_Y", "")),
-            }) if _str(r.get("weapon")) in _UTIL_HURT_WEAPONS else None
+            })
         ),
     )
     try:
