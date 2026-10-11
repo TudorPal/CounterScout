@@ -18,6 +18,7 @@ GET  /api/health                                       Health check
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -34,7 +35,7 @@ import httpx
 from fastapi import FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, Field
 
 from backend.config import settings
 from backend.version import VERSION
@@ -150,6 +151,11 @@ _rcon = RCONBridge()
 async def _llm_complete(prompt: str, max_tokens: int = 1500) -> str:
     """Send a prompt to the configured LLM and return the text response."""
 
+    # The same free-tier key also enables the existing match recap and lineups.
+    if settings.groq_api_key and settings.team_ai_provider == "groq":
+        from backend.analysis.tactical_ai import complete
+        return await complete([{"role": "user", "content": prompt}], max_tokens=max_tokens)
+
     # Try Anthropic first (if key is set)
     if settings.anthropic_api_key:
         try:
@@ -217,6 +223,8 @@ async def _llm_complete(prompt: str, max_tokens: int = 1500) -> str:
 
 def _get_ai_model_name() -> str:
     """Return the model name currently in use."""
+    if settings.groq_api_key and settings.team_ai_provider == "groq":
+        return settings.groq_model
     if settings.anthropic_api_key:
         return settings.anthropic_model
     if settings.openrouter_api_key:
@@ -2108,6 +2116,88 @@ async def get_match_replay_insights(demo_file: str):
     ai_cache.put("insights", name, summary)
     return resp
 
+
+# ---------------------------------------------------------------------------
+# Team tactical evidence and optional free-tier AI interpretation
+# ---------------------------------------------------------------------------
+
+
+class TeamAnalysisRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    team_name: str = Field(min_length=1, max_length=100)
+    map_name: str = Field(min_length=1, max_length=40, pattern=r"^de_[a-z0-9_]+$")
+    demo_files: list[str] = Field(min_length=1, max_length=12)
+
+
+_TEAM_EVIDENCE_LOCK = asyncio.Lock()
+_TEAM_AI_LOCK = asyncio.Lock()
+
+
+@app.get("/api/ai/configuration")
+async def get_team_ai_configuration():
+    from backend.analysis.tactical_ai import configuration
+    return configuration()
+
+
+async def _team_evidence(request: TeamAnalysisRequest):
+    from backend.analysis.team_tactics import EVIDENCE_VERSION, build_evidence
+    from backend.ingestion.demo_parser import TIMELINE_CACHE_VERSION
+
+    names = sorted(set(_safe_demo_name(name) for name in request.demo_files))
+    async with _TEAM_EVIDENCE_LOCK:
+        # Validate/rebuild current timeline revisions, never trust stale parser caches.
+        for name in names:
+            await get_match_replay_timeline(name)
+        rosters = {name: _load_roster_for_demo(name) or {} for name in names}
+        fingerprint = {"version": EVIDENCE_VERSION, "team": request.team_name.strip(), "map": request.map_name,
+                       "sources": {name: {"revision": timeline_cache.revision(settings.demo_dir/name, _TIMELINE_CACHE_DIR/f"{name}.json", TIMELINE_CACHE_VERSION),
+                                          "roster": rosters[name]} for name in names}}
+        for path in (_RADAR_DIR/"map-data.json", Path(__file__).resolve().parent/"data/callouts"/f"{request.map_name}.json"):
+            if path.exists():
+                fingerprint[str(path.name)] = [path.stat().st_mtime_ns, path.stat().st_size]
+        key = hashlib.sha256(json.dumps(fingerprint, sort_keys=True).encode()).hexdigest()
+        persisted = await asyncio.to_thread(ai_cache.get, "team_evidence", key)
+        if persisted is not None:
+            return json.loads(persisted), key
+
+        def extract():
+            def sources():
+                # Stream one demo at a time instead of holding twelve huge timelines.
+                for name in names:
+                    with (_TIMELINE_CACHE_DIR/f"{name}.json").open(encoding="utf-8") as stream:
+                        bundle = json.load(stream)
+                    yield name, bundle, rosters[name]
+            return build_evidence(sources(), request.team_name.strip(), request.map_name)
+
+        try:
+            evidence = await asyncio.to_thread(extract)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
+        await asyncio.to_thread(ai_cache.put, "team_evidence", key, json.dumps(evidence))
+        return evidence, key
+
+
+@app.post("/api/ai/team/evidence", summary="Build local team tactics without an AI key or external requests")
+async def get_team_evidence(request: TeamAnalysisRequest):
+    evidence, _ = await _team_evidence(request)
+    return evidence
+
+
+@app.post("/api/ai/team/report", summary="Interpret demo-derived team tactics using the selected AI provider")
+async def get_team_tactical_report(request: TeamAnalysisRequest):
+    from backend.analysis.tactical_ai import PROMPT_VERSION, configuration, generate_report
+    config = configuration()
+    if not config["configured"]:
+        raise HTTPException(503, "Add the selected provider's API key to .env and restart the backend. See docs/ai-team-analysis.md.")
+    evidence, evidence_key = await _team_evidence(request)
+    key = hashlib.sha256(f"{evidence_key}:{PROMPT_VERSION}:{config['provider']}:{config['model']}".encode()).hexdigest()
+    async with _TEAM_AI_LOCK:
+        persisted = await asyncio.to_thread(ai_cache.get, "team_report", key)
+        if persisted is not None:
+            return {"report": json.loads(persisted), "model": config["model"], "provider": config["provider"], "cached": True}
+        report = await generate_report(evidence)
+        await asyncio.to_thread(ai_cache.put, "team_report", key, json.dumps(report))
+        return {"report": report, "model": config["model"], "provider": config["provider"], "cached": False}
 
 # ---------------------------------------------------------------------------
 # CS2 replay integration — directory junction + path settings

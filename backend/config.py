@@ -46,6 +46,11 @@ class Settings(BaseSettings):
     openrouter_model: str = "google/gemma-3-27b-it:free"
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
+    # Tactical reports use one explicitly selected provider, never a paid fallback.
+    team_ai_provider: str = "groq"
+    groq_api_key: str = ""
+    groq_model: str = "openai/gpt-oss-120b"
+
     # HLTV match catalog (tournaments/matches browser)
     catalog_refresh_pages: int = 2          # /results pages per refresh (100 matches each)
     catalog_autopull: bool = True           # auto-download demos for big-event matches
