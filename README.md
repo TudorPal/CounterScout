@@ -11,7 +11,7 @@ Team/map pickers in the match library, Lineups, and Replay are searchable with k
 
 Reload the unpacked **CounterScout — FACEIT Bridge** extension in Chrome after updating (version **0.2.2**), then refresh application and FACEIT tabs. Existing notes/settings are copied to CounterScout keys without overwriting newer settings. Replay database IDs, deployed namespaces/paths, and Docker volume names remain compatible to preserve existing data. The upstream GitHub repository URL and your checkout folder are unchanged. For existing Compose installations with custom volume names, set `COUNTERSCOUT_DATA_VOLUME`, `COUNTERSCOUT_DEMOS_VOLUME`, and `COUNTERSCOUT_PHOTOS_VOLUME` accordingly.
 
-A pro-level CS2 demo analysis platform. Mines demos from HLTV and FACEIT, extracts every grenade throw, clusters identical lineups, ranks them by impact, and serves them on a HUD-styled dashboard. Includes a full 2D match replay viewer, an Insights panel with round/pattern/heatmap modes, economy tracking, per-player stats, cross-demo Player Profiles, AI-powered insights, and **automated opponent scouting reports** — a feature neither Refrag nor SCL.gg offer.
+A pro-level CS2 demo analysis platform. Mines demos from HLTV and FACEIT, extracts every grenade throw, clusters identical lineups, ranks them by impact, and serves them on a HUD-styled dashboard. Includes a full 2D match replay viewer, dedicated Round Utility, Utility Heatmap and Movement Patterns views, economy tracking, per-player stats, cross-demo Player Profiles, AI-powered insights, and **automated opponent scouting reports** — a feature neither Refrag nor SCL.gg offer.
 
 ### 1. Home — Pick a module from the landing page
 ![Landing Page](docs/screenshots/landing.png)
@@ -94,12 +94,13 @@ Feed the engine multiple demos of the team you're playing next week and get:
 - **Timestamped notes** — Add bookmarks at any tick (stored in localStorage), shown as diamond markers on the scrubber
 - **AI match recap** — Claude/OpenRouter-powered 3-5 paragraph narrative summary
 
-### Insights Panel
-Accessed from the Insights tab within any loaded demo:
-- **Round mode** — Utility paths, victim entry/exit markers, flash blinds, and AOE radii overlaid on the radar
-- **Patterns mode** — Detect repeated grenade sequences across rounds; click any pattern badge to jump to it; filter by player or nade type; flash effectiveness scoring (enemies-in-range at detonation)
-- **Heatmap mode** — Aggregated grenade landings across the entire match, filterable by HE / Smoke / Flash / Molotov
-- **Live scrub** — Seek to any throw or event directly from the panel; highlights sync with the radar overlay
+### Tactical views
+Accessed directly from the left navigation within any loaded demo:
+- **Round Utility** — Utility paths, victim entry/exit markers, flash blinds, and AOE radii overlaid on the radar
+- **Movement Patterns** — Detect repeated grenade sequences across rounds; click any pattern badge to jump to it; filter by player or nade type; flash effectiveness scoring (enemies-in-range at detonation)
+- **Utility Heatmap** — Aggregated grenade landings across the entire match, filterable by HE / Smoke / Flash / Molotov
+- **Shared controls** — Replay and tactical views use the same Smoke / Flash / HE / Molotov / Decoy multi-select toggles. Select rounds from the top strip; Heatmap/Patterns also allow All rounds.
+- **Player Positions** — The separate position-density heatmap retains side, team and player filtering.
 
 ### Economy Tracker
 - **Equipment value graph** — Bar chart of T vs CT equipment value per round with hover details
@@ -411,7 +412,9 @@ deployment on a self-hosted Proxmox box:
 | `/lineups` | Grenade Lineups | Lineup grid, scatter plot, ingest controls, execute combos |
 | `/replay` | Demo Picker | Upload/browse demos, grouped by map |
 | `/replay/:file` | Match Replay | 2D viewer with playback controls |
-| `/replay/:file/insights` | Insights | Round/pattern/heatmap overlay panel |
+| `/replay/:file/insights` | Round Utility | Per-round utility and events |
+| `/replay/:file/insights/heatmap` | Utility Heatmap | Aggregate grenade landings |
+| `/replay/:file/insights/patterns` | Movement Patterns | Round-relative movement and utility |
 | `/replay/:file/economy` | Economy | Equipment graph + round-by-round buy analysis |
 | `/replay/:file/heatmap` | Heatmap | Position/death/grenade density overlays |
 | `/replay/:file/stats` | Stats | Per-player scoreboard + detailed breakdowns |
@@ -486,7 +489,7 @@ The Replay library supports search, team/map filters, and **Map** or **Team → 
 
 Lineups has a separate team selector for the current map. Counts, win rates, rankings, and replay examples are calculated from that team's individual throws, including when both teams used the same lineup. Roster renames take effect without reanalysing. Older databases need one analysis refresh to store throw provenance; the page offers an update button when necessary.
 
-Replay views use sidebar navigation and a collapsed round overview. Insights keeps player statistics behind the **Players** toggle on smaller desktop screens to preserve radar space; the round dropdown remains available without expanding the overview.
+Replay and tactical views share sidebar navigation, matching radar-panel spacing, and fixed player cards outside map pan/zoom. The top round strip is the only tactical round picker; click a focused round again or All rounds to reset aggregate views.
 
 The replay sidebar's **⋮** menu opens application navigation. The top score follows playback (or the selected round result in Insights). Compact round tiles wrap by half and overtime phase; their survivor bars always show the final round result, independent of playback. Team membership stays fixed while T/CT sides follow the demo through every overtime switch.
 
