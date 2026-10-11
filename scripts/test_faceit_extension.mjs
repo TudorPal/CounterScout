@@ -147,6 +147,7 @@ assert.equal(calls.filter(c=>c.url.endsWith('/matches')).length,savedBefore,'Can
 await popupSend({type:'sync'});
 const confirmed=await popupSend({type:'confirm-sync',reviewed_names:{[MATCH]:{faction1:'Reviewed team'}}});
 assert.ok(confirmed.ok);
+assert.match(storage.status,/Now click Download demo.*each played map/,'Manual sync provides a clear next action');
 assert.equal(JSON.parse(calls.filter(c=>c.url.endsWith('/matches')).at(-1).options.body).reviewed_names[MATCH].faction1,'Reviewed team');
 assert.ok(!storage.sync_draft);
 const connection=await send({type:'connection-status'});
@@ -187,6 +188,28 @@ assert.equal(interrupted.command_id,'interrupted-worker');
 assert.match(interrupted.error,/extension restarted/);
 assert.equal(interrupted.expected_count,2);
 assert.ok(!storage.active_command);
+// Popup's optional download handoff uses the reviewed current room, not a new
+// guessed match URL. BO1 and BO3 both import every returned demo link.
+const importsBeforePopup=calls.filter(c=>c.url.endsWith('/imports')).length;
+availableUrls=[signed1];
+await popupSend({type:'sync'});
+assert.equal(storage.sync_draft.tab_id,7);
+assert.equal((await popupSend({type:'confirm-sync',download:true})).ok,true);
+assert.equal(calls.filter(c=>c.url.endsWith('/imports')).length,importsBeforePopup+1);
+availableUrls=[signed1,signed2,'https://demos.faceit-cdn.net/third.dem.zst'];
+await popupSend({type:'sync'});
+assert.equal((await popupSend({type:'confirm-sync',download:true})).ok,true);
+assert.equal(calls.filter(c=>c.url.endsWith('/imports')).length,importsBeforePopup+4);
+assert.match(storage.status,/Started 3 map demos|Demo queued for import/,'Fast completed downloads can supersede the start message');
+await popupSend({type:'sync'});
+storage.sync_draft.match_id=null;
+assert.match((await popupSend({type:'confirm-sync',download:true})).error,/match room/,'Team history cannot auto-download unrelated matches');
+await popupSend({type:'cancel-sync'});
+storage.enabled=false;
+await popupSend({type:'sync'});
+assert.match((await popupSend({type:'confirm-sync',download:true})).error,/Enable team sync/);
+assert.ok(storage.sync_draft,'Denied automatic imports preserve the review');
+await popupSend({type:'cancel-sync'});
 storage.enabled=false;listeners.created({...item,id:43});await tick();await tick();
 assert.ok(!storage.download_43,'Disabled automatic imports stay disabled');
 assert.equal((await send({type:'connection-status'})).enabled,false,'Paused is distinct from disconnected');

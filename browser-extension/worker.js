@@ -59,13 +59,31 @@ async function syncPage(tabId,teamId='',commandId=null,preview=false) {
   }
   if(!matches.length) throw new Error('FACEIT did not return match metadata. Sign in to FACEIT normally, then sync again.');
   if(preview) {
-    const draft={team_id:teamId || page.team_id || '',matches};
+    const draft={team_id:teamId || page.team_id || '',matches,tab_id:tabId,match_id:page.match_id || null};
     await chrome.storage.local.set({sync_draft:draft});
     await chrome.storage.local.remove('sync_reviewed_names');
     return {draft};
   }
   await local('/matches',{team_id:teamId || page.team_id || '',command_id:commandId,matches});
   await status('Synced '+matches.length+' matches'+(failed?' ('+failed+' unavailable)':'')+'. Open Import to browse them.');
+}
+async function downloadRoomDemos(tabId,roomId) {
+  await waitForContent(tabId,roomId);
+  const result=await tabMessage(tabId,{type:'download-details',match_id:roomId});
+  if(result?.error) throw new Error(result.error);
+  if(result?.metadata?.id!==roomId) throw new Error('The captured match room has changed. Open the reviewed match and sync again.');
+  const metadata=publicMatch(result.metadata),urls=demoUrls(result);
+  if(!urls.length) throw new Error('No demo links are available yet. Click Download demo in the FACEIT room when available.');
+  let count=0;
+  for(const [index,url] of urls.entries()) {
+    const suffix=new URL(url).pathname.match(/\.dem(?:\.(?:gz|zst))?$/i)?.[0] || '.dem';
+    const id=await chrome.downloads.download({url,filename:`faceit_${roomId}_map${index+1}${suffix}`,conflictAction:'uniquify',saveAs:false});
+    count++;
+    await chrome.storage.local.set({['download_'+id]:{match_id:roomId,tab_id:tabId,metadata}});
+    const [item]=await chrome.downloads.search({id});
+    if(item?.state==='complete') await importCompleted(item);
+  }
+  return count;
 }
 async function processCommands() {
   if(processing) return;
@@ -196,10 +214,18 @@ chrome.runtime.onMessage.addListener((message,sender,reply)=>{
     if(message.type==='confirm-sync' && popup) {
       const {sync_draft:draft}=await chrome.storage.local.get('sync_draft');
       if(!draft) throw new Error('Capture the current FACEIT page first.');
-      await local('/matches',{...draft,reviewed_names:message.reviewed_names || {}});
+      const {enabled}=await config();
+      if(message.download && !enabled) throw new Error('Check Enable team sync, then Save & connect before automatic download/import.');
+      if(message.download && (!draft.match_id || draft.tab_id==null)) throw new Error('Automatic download is available when syncing a match room, not a team history page.');
+      await local('/matches',{team_id:draft.team_id,matches:draft.matches,reviewed_names:message.reviewed_names || {}});
       await chrome.storage.local.remove('sync_draft');
       await chrome.storage.local.remove('sync_reviewed_names');
-      await status('Synced '+draft.matches.length+' matches with reviewed team names.');
+      if(message.download) {
+        try {
+          const count=await downloadRoomDemos(draft.tab_id,draft.match_id);
+          await status(`Team names synced. Started ${count} map demo${count===1?'':'s'}. CounterScout will show import progress and a Replay notification after each finishes.`);
+        } catch(e) { await status('Team names synced. '+e.message+' You can download manually; completed demos will still import automatically.'); }
+      } else await status('Team names synced. Now click Download demo in the FACEIT match room (each played map for a series). Keep Enable team sync checked; CounterScout shows import progress and a Replay notification when ready.');
       return {ok:true};
     }
     if(message.type==='cancel-sync' && popup) {
@@ -246,7 +272,7 @@ async function importCompleted(item) {
     const metadata=saved.metadata || await detail(saved.match_id,saved.tab_id);
     await local('/imports',{match_id:saved.match_id,path:item.filename,metadata});
     await chrome.storage.local.remove(key);
-    await status('Demo queued for import. Progress is shown in Import.');
+    await status('Demo queued for import. CounterScout’s Imports menu shows progress and a Replay notification when ready.');
   } catch(e) { await status('Import failed: '+e.message+' Your download was preserved.'); }
   finally { importing.delete(item.id); }
 }

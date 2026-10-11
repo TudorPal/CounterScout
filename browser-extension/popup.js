@@ -4,6 +4,7 @@ let draft=null, reviewedNames={};
 const review=document.getElementById('review'),matchSelect=document.getElementById('review-match');
 const names=[document.getElementById('team1'),document.getElementById('team2')];
 const applyHistory=document.getElementById('apply-history');
+const downloadAfterSync=document.getElementById('download-after-sync');
 const expandedNames=()=>draft?reviewedSyncNames(draft.matches,reviewedNames,applyHistory.checked):{};
 function showMatch() {
   const m=draft.matches[Number(matchSelect.value)];
@@ -14,6 +15,9 @@ function showMatch() {
 }
 function openDraft(value,edits={}) {
   draft=value;reviewedNames=edits;review.hidden=false;matchSelect.replaceChildren();
+  downloadAfterSync.checked=false;
+  downloadAfterSync.disabled=!draft.match_id;
+  downloadAfterSync.parentElement.title=draft.match_id?'Works for one map and multi-map series.':'Open a match room to download its demos.';
   draft.matches.forEach((m,i)=>{const option=document.createElement('option');option.value=String(i);option.textContent=(m.teams.faction1.name || 'Team 1')+' vs '+(m.teams.faction2.name || 'Team 2');matchSelect.append(option);});
   showMatch();status.textContent='Review team names, then Confirm & sync.';
 }
@@ -29,7 +33,7 @@ chrome.storage.local.get(['token','enabled','status']).then(data=>{token.value=d
 async function request(type,button) {
   button.disabled=true;status.textContent='Working…';
   try {
-    const result=await chrome.runtime.sendMessage({type,token:token.value.trim(),enabled:enabled.checked,reviewed_names:expandedNames()});
+    const result=await chrome.runtime.sendMessage({type,token:token.value.trim(),enabled:enabled.checked,reviewed_names:expandedNames(),download:type==='confirm-sync' && downloadAfterSync.checked});
     if(result?.error) throw new Error(result.error);
     if(result?.draft) {openDraft(result.draft);return;}
     if(type==='confirm-sync' || type==='cancel-sync') {draft=null;review.hidden=true;}
