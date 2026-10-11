@@ -29,16 +29,21 @@ try {
     if(path.endsWith('/bridge/library'))body={matches:[],commands:[],imports:[]};
     else if(path.endsWith('/ingest/status'))body={run_id:0,last_completed_run_id:0};
     else if(path==='/api/ai/configuration')body={provider:'groq',model:'openai/gpt-oss-120b',configured,paid_fallback:false};
+    else if(path==='/api/settings/ai'){
+      const request=route.request().postDataJSON();assert.equal(request.api_key,'browser-test-key');
+      configured=true;body={provider:'groq',model:'openai/gpt-oss-120b',configured,paid_fallback:false};
+    }
+    else if(path==='/api/settings/cs2-path')body={configured_path:null,detected_path:null,active_path:null,link_active:false,link_name:'cs2tool_demos'};
     else if(path==='/api/ai/team/evidence'){
       evidenceRequests++;const request=route.request().postDataJSON();assert.equal(request.team_name,'Scouted');assert.deepEqual(request.demo_files,['cache.dem']);body=evidence;
     }
     else if(path==='/api/ai/team/report'){reportRequests++;body={report,model:'openai/gpt-oss-120b',provider:'groq',cached:reportRequests>1};}
+    else if(path.endsWith('/insights') && route.request().method()==='POST'){snapshotRequests++;body={demo_file:'cache.dem',summary:snapshot,model:'test'};}
     else if(path==='/api/match-replay/demos')body=[{demo_file:'cache.dem',map_name:'de_cache',team1_name:'Scouted',team2_name:'Enemy'}];
     else if(path.includes('/match-info/'))body=info;
     else if(path.endsWith('/revision'))body={revision:'tactical-ui-test'};
     else if(path.endsWith('/timeline'))body=timeline;
     else if(path.endsWith('.png'))return route.fulfill({contentType:'image/png',body:readFileSync('backend/data/radars/de_cache.png')});
-    else if(path.endsWith('/insights') && route.request().method()==='POST'){snapshotRequests++;body={demo_file:'cache.dem',summary:snapshot,model:'test'};}
     else if(path.startsWith('/api/radars/'))body={map_name:'de_cache',pos_x:0,pos_y:1024,scale:1,image_url:'/api/radars/de_cache.png'};
     else if(path.startsWith('/api/callouts/'))body={callouts:[]};
     await route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
@@ -55,14 +60,14 @@ try {
   await ai.getByRole('button',{name:'Generate AI report'}).click();
   await ai.getByText(report.overview,{exact:true}).waitFor();
   assert.equal(reportRequests,1);assert.equal(evidenceRequests,1,'Reuse displayed local evidence');
+  await ai.getByRole('heading',{name:'Plan 1 — R14 hold'}).waitFor();
+  assert.match(await ai.innerText(),/Setup[\s\S]*Timing \/ rotations[\s\S]*Utility support[\s\S]*Roles \/ possible lurks/);
+  assert.match(await ai.innerText(),/Counterplay · coaching hypotheses/i);
   await ai.getByRole('button',{name:'T',exact:true}).click();
   assert.equal(await ai.locator('article').count(),0);
   await ai.getByRole('button',{name:'Both sides',exact:true}).click();
   assert.equal(await ai.locator('article').count(),1);
   await ai.locator('article summary').click();
-  await ai.getByRole('heading',{name:'Plan 1 — R14 hold'}).waitFor();
-  assert.match(await ai.innerText(),/Setup[\s\S]*Timing \/ rotations[\s\S]*Utility support[\s\S]*Roles \/ possible lurks/);
-  assert.match(await ai.innerText(),/Counterplay · coaching hypotheses/i);
   assert.match(await ai.innerText(),/14s · Alpha · smoke/);
   assert.equal(reportRequests,1,'Side/evidence filters do not make new provider requests');
   mkdirSync('.cache/ui-preview',{recursive:true});
@@ -87,6 +92,16 @@ try {
   await ai.getByRole('button',{name:'Build team evidence'}).click();
   await ai.getByText('CT · Full Buy',{exact:true}).waitFor();
   assert.equal(await ai.getByRole('button',{name:'Generate AI report'}).isEnabled(),false);
+  await ai.getByRole('button',{name:'AI settings',exact:true}).first().click();
+  const dialog=page.getByRole('dialog',{name:'Settings'});
+  await dialog.getByLabel('AI API key').fill('browser-test-key');
+  assert.equal(await dialog.getByLabel('AI API key').getAttribute('type'),'password');
+  await dialog.getByRole('button',{name:'Save AI settings'}).click();
+  await dialog.getByText(/Saved locally and applied immediately/).waitFor();
+  assert.equal(await dialog.getByLabel('AI API key').inputValue(),'','Clear secret from UI after saving');
+  await dialog.getByRole('button',{name:'Close settings'}).click();
+  await ai.getByRole('checkbox',{name:'Allow AI evidence upload'}).waitFor();
+  assert.equal(await ai.getByRole('button',{name:'Generate AI report'}).isEnabled(),false,'Consent resets after key/provider settings change');
   await page.goto('http://127.0.0.1:5189/anti-strat');
   await page.getByRole('combobox',{name:'Scout team'}).fill('Scouted');
   await page.getByRole('option',{name:'Scouted',exact:true}).click();

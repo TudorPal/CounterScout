@@ -77,6 +77,8 @@ app = FastAPI(
     description="Discover and practice pro-level grenade lineups powered by demoparser2, DBSCAN, and RCON.",
     version=VERSION,
 )
+from backend.ai_settings import router as ai_settings_router
+app.include_router(ai_settings_router)
 
 app.add_middleware(
     CORSMiddleware,
@@ -680,9 +682,9 @@ def _get_player_slots(demo_file: str) -> dict[str, int]:
 _TIMELINE_CACHE_DIR = Path("data/timelines")
 _TIMELINE_LOCKS: dict[str, asyncio.Lock] = {}
 _INSIGHTS_CACHE: dict[str, MatchInsightsResponse] = {}
-
-
 _INSIGHTS_LOCKS: dict[str, asyncio.Lock] = {}
+
+
 def _safe_demo_name(demo_file: str) -> str:
     """
     Validate that `demo_file` is a plain filename with no path components,

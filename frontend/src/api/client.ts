@@ -30,6 +30,7 @@ export interface TeamTacticalReport {
 }
 export interface TeamAiConfiguration {provider:string;model:string;configured:boolean;paid_fallback:boolean}
 export const getTeamAiConfiguration = async () => (await api.get<TeamAiConfiguration>("/ai/configuration")).data;
+export const saveAiSettings = async (request:{provider:string;api_key:string;remove_key?:boolean}) => (await api.put<TeamAiConfiguration>("/settings/ai",request)).data;
 export const getTeamTacticalEvidence = async (request:TeamAnalysisRequest) => (await api.post<TeamTacticalEvidence>("/ai/team/evidence",request,{timeout:180000})).data;
 export const getTeamTacticalReport = async (request:TeamAnalysisRequest) => (await api.post<{report:TeamTacticalReport;model:string;provider:string;cached:boolean}>("/ai/team/report",request,{timeout:180000})).data;
 

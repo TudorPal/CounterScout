@@ -2,6 +2,8 @@
  * SettingsPanel — HUD-styled modal for CS2 path configuration and demo linking.
  */
 import { useEffect, useState } from "react";
+import {createPortal} from 'react-dom';
+import AiSettingsPanel from './AiSettingsPanel';
 import {
   Cs2PathResponse,
   getCs2Path,
@@ -84,18 +86,20 @@ export default function SettingsPanel({ open, onClose }: Props) {
     }
   };
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="hud-panel w-full max-w-lg p-6 flex flex-col gap-5 relative"
+        role="dialog" aria-modal="true" aria-label="Settings"
+        className="hud-panel w-full max-w-lg max-h-[90vh] overflow-y-auto p-6 flex flex-col gap-5 relative"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Close button */}
         <button
           onClick={onClose}
+          aria-label="Close settings"
           className="absolute top-3 right-3 text-scout-muted hover:text-white text-lg leading-none"
         >
           x
@@ -189,6 +193,7 @@ export default function SettingsPanel({ open, onClose }: Props) {
           </div>
         </div>
 
+        <AiSettingsPanel/>
         {/* Feedback message */}
         {message && (
           <p className="text-[10px] text-scout-accent border-l-2 border-scout-accent/40 pl-2">
@@ -196,6 +201,6 @@ export default function SettingsPanel({ open, onClose }: Props) {
           </p>
         )}
       </div>
-    </div>
+    </div>, document.body
   );
 }

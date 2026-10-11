@@ -147,6 +147,7 @@ async def serve(sockets, folder: Path, open_browser: bool, stop_after: float | N
                 raise RuntimeError("CounterScout did not start. See user-data/logs/CounterScout.log.")
             await asyncio.sleep(0.1)
         print(f"\nCounterScout {VERSION} ready: {WEB_URL}\nData: {folder}\nKeep this window open. Ctrl+C stops CounterScout.\n", flush=True)
+        print("Optional AI: open Settings > AI analysis in the browser to add/change your key. Never share user-data/.env.\n", flush=True)
         if open_browser:
             threading.Thread(target=webbrowser.open, args=(WEB_URL,), daemon=True).start()
         if stop_after is not None:

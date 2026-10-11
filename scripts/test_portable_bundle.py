@@ -91,7 +91,7 @@ def main():
     env = os.environ.copy()
     for key in list(env):
         if key.upper().startswith(("PYTHON", "CONDA", "VIRTUAL_ENV")) or key in {
-            "DATABASE_URL", "DEMO_DIR", "DB_PATH", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "FACEIT_API_KEY"}:
+            "DATABASE_URL", "DEMO_DIR", "DB_PATH", "ANTHROPIC_API_KEY", "OPENROUTER_API_KEY", "GROQ_API_KEY", "TEAM_AI_PROVIDER", "FACEIT_API_KEY"}:
             env.pop(key, None)
     env["PATH"] = str(Path(env.get("SystemRoot", "C:/Windows")) / "System32")
     with tempfile.TemporaryDirectory(prefix="CounterScout-portable-test-") as tmp:
@@ -114,6 +114,17 @@ def main():
                 asset = re.search(r'src="([^"]+\.js)"', page).group(1)
                 assert get(asset)[0] == 200
                 assert payload("/api/demos")["total_demos"] == 0
+                config=payload('/api/ai/configuration')
+                assert config['provider']=='groq' and not config['configured'], 'A shared bundle must not contain your private API key'
+                request=urllib.request.Request(ORIGIN+'/api/settings/ai',data=json.dumps({'provider':'groq','api_key':'portable-test-placeholder'}).encode(),
+                                               headers={'Content-Type':'application/json','Origin':ORIGIN},method='PUT')
+                with OPENER.open(request,timeout=10) as response:
+                    saved=response.read()
+                    assert response.status==200 and json.loads(saved)['configured']
+                    assert b'portable-test-placeholder' not in saved
+                assert payload('/api/ai/configuration')['configured']
+                assert (data/'.env').is_file()
+                print('PASS clean release has no private key; local browser key settings apply without restart',flush=True)
                 assert payload("/api/radars/de_nuke")["scale"] > 0
                 assert get("/api/radars/de_nuke.png")[2].startswith(b"\x89PNG")
                 assert isinstance(payload("/api/callouts/de_inferno")["callouts"], list)
@@ -164,6 +175,7 @@ def main():
                 check_ports()
                 process = subprocess.Popen(command, cwd=folder, env=env, stdout=output, stderr=subprocess.STDOUT)
                 wait_ready(process)
+                assert payload('/api/ai/configuration')['configured'], 'Saved local key must survive a portable restart'
                 assert payload("/api/ingest/faceit/bridge/setup", {"Origin": ORIGIN})["token"] == setup["token"]
                 if demo:
                     assert payload("/api/demos")["total_demos"] == 1

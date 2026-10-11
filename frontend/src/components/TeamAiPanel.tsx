@@ -1,12 +1,13 @@
 import {useEffect,useRef,useState} from 'react';
 import {Link} from 'react-router-dom';
+import SettingsPanel from './SettingsPanel';
 import {getTeamAiConfiguration,getTeamTacticalEvidence,getTeamTacticalReport} from '../api/client';
 import type {TeamAiConfiguration,TeamTacticalEvidence,TeamTacticalReport,TeamAnalysisRequest,TeamTacticalRound} from '../api/client';
 
 const label=(buy:string)=>buy==='mixed/unknown'?'Mixed / unknown':buy.split('-').map(w=>w[0].toUpperCase()+w.slice(1)).join(' ');
 const roundLink=(r:TeamTacticalRound)=>`/replay/${encodeURIComponent(r.demo_file)}/insights?round=${r.round}`;
-
 const countLabel=(n:number,label:string)=>`${n} ${label}${n===1?'':'s'}`;
+
 /** On-demand only: switching maps/teams never submits a provider request. */
 export default function TeamAiPanel({request}:{request:TeamAnalysisRequest}) {
   const [configuration,setConfiguration]=useState<TeamAiConfiguration|null>(null);
@@ -15,11 +16,13 @@ export default function TeamAiPanel({request}:{request:TeamAnalysisRequest}) {
   const [stage,setStage]=useState<'idle'|'evidence'|'ai'>('idle');
   const [error,setError]=useState('');
   const [consent,setConsent]=useState(false);
+  const [settingsOpen,setSettingsOpen]=useState(false);
   const [side,setSide]=useState<'all'|'T'|'CT'>('all');
   const revision=useRef(0);
   const context=JSON.stringify({...request,demo_files:[...request.demo_files].sort()});
   useEffect(()=>{revision.current++;setEvidence(null);setResult(null);setStage('idle');setError('');setSide('all');},[context]);
   useEffect(()=>{let active=true;getTeamAiConfiguration().then(c=>{if(active)setConfiguration(c);}).catch(()=>{if(active)setError('Could not read AI configuration. Check the backend and retry.');});return()=>{active=false;revision.current++;};},[]);
+  useEffect(()=>{const changed=(event:Event)=>{setConfiguration((event as CustomEvent<TeamAiConfiguration>).detail);revision.current++;setStage('idle');setResult(null);setError('');setConsent(false);};window.addEventListener('counterscout:ai-settings',changed);return()=>window.removeEventListener('counterscout:ai-settings',changed);},[]);
   const ready=!!request.team_name && !!request.map_name && request.demo_files.length>0 && request.demo_files.length<=12;
   const run=async(ai:boolean)=>{
     const current=++revision.current;
@@ -40,13 +43,14 @@ export default function TeamAiPanel({request}:{request:TeamAnalysisRequest}) {
         <p className="text-xs text-scout-muted mt-1">{request.demo_files.length} selected demos · {request.map_name || 'Select a map'} · Full-game evidence, independent of the explorer's scenario filters.</p>
       </div>
       <div className="flex flex-wrap gap-2">
+        <button className="hud-btn text-sm" onClick={()=>setSettingsOpen(true)}>AI settings</button>
         <button className="hud-btn text-sm" disabled={!ready || busy} onClick={()=>run(false)}>Build team evidence</button>
         <button className="hud-btn-primary text-sm" disabled={!ready || busy || !configuration?.configured || !consent} onClick={()=>run(true)}>{result?'Load AI report':'Generate AI report'}</button>
       </div>
     </div>
     {request.demo_files.length>12 && <p role="alert" className="text-sm text-scout-red">Select at most 12 demos per report.</p>}
     {!configuration ? <p className="text-xs text-scout-muted">Checking AI configuration…</p> : !configuration.configured ?
-      <div className="rounded-lg bg-white/5 p-3 text-sm text-scout-muted">AI key not configured. Create a free key at <a className="text-scout-accent underline" href={configuration.provider==='groq'?'https://console.groq.com/keys':'https://openrouter.ai/keys'} target="_blank" rel="noreferrer">{configuration.provider}</a>, add {configuration.provider==='groq'?'GROQ_API_KEY':'OPENROUTER_API_KEY'} to your local .env, then restart the backend. Evidence works without a key. Setup: docs/ai-team-analysis.md.</div> :
+      <div className="rounded-lg bg-white/5 p-3 text-sm text-scout-muted">AI key not configured. Open <button className="text-scout-accent underline" onClick={()=>setSettingsOpen(true)}>AI settings</button> to paste a free {configuration.provider} key. Applies immediately—no restart needed. Evidence works without a key. Setup: docs/ai-team-analysis.md.</div> :
       <label className="flex items-start gap-2 text-xs text-scout-muted"><input type="checkbox" aria-label="Allow AI evidence upload" checked={consent} onChange={e=>setConsent(e.target.checked)} className="accent-scout-accent mt-0.5"/>Allow sending team/player names and compact tactical evidence to {configuration.provider} ({configuration.model}). Demo files are not uploaded. No paid-provider fallback.</label>}
     {busy && <div role="status" aria-live="polite" className="flex items-center gap-3 text-sm text-scout-accent"><span className="w-4 h-4 rounded-full border-2 border-current border-t-transparent animate-spin"/>{stage==='evidence'?'Building routes, buy categories and utility evidence…':'AI is interpreting the evidence…'}</div>}
     {error && <p role="alert" className="text-sm text-scout-red">{error}</p>}
@@ -85,5 +89,6 @@ export default function TeamAiPanel({request}:{request:TeamAnalysisRequest}) {
       })}</div>
       <details className="text-xs text-scout-muted"><summary className="cursor-pointer">Method and limitations</summary><ul className="mt-2 space-y-1 list-disc pl-4">{[...evidence.limitations,...(result?.report.limitations ?? [])].map((text,i)=><li key={i}>{text}</li>)}</ul></details>
     </>}
+    {settingsOpen && <SettingsPanel open onClose={()=>setSettingsOpen(false)}/>}
   </section>;
 }
