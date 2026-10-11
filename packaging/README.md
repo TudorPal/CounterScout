@@ -53,7 +53,9 @@ from PATH, and check static assets, deep links, API proxy, map resources, extens
 pairing, duplicate launch, occupied-port errors, shutdown and data persistence.
 An actual Chrome/faceit.com download and a clean Windows VM remain release checks.
 The launcher intentionally keeps a console open for Ctrl+C and useful diagnostics.
-This initial build is unsigned; public distribution should add code signing.
+The current build is unsigned; public distribution should add code signing. See
+[the Windows signing walkthrough](../docs/windows-signing.md) for the free open-source
+SignPath route, eligibility and how to sign/verify before creating the final ZIP.
 
 ## Share through GitHub Releases
 

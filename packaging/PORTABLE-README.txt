@@ -28,7 +28,10 @@ some archives may require 7-Zip. Plain DEM and FACEIT uploads do not need it.
 
 AI recaps are optional and need your own AI provider key.
 For a free Groq key and team tactical reports, see docs/ai-team-analysis.md.
-Copy portable.env.example to user-data/.env, fill in a key, then restart.
+Open Settings > AI analysis in the browser, paste your own free Groq key and Save.
+The key applies immediately. Replace/remove it there later; existing keys stay hidden.
+Your key is stored in user-data/.env (plaintext). The shared ZIP contains no key.
+Alternatively copy portable.env.example to user-data/.env and restart after editing.
 Never send your configured .env or user-data folder to other people.
 
 Troubleshooting:

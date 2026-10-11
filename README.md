@@ -144,10 +144,10 @@ Accessed from the Insights tab within any loaded demo:
 
 ### AI Features
 
-- **Team tactical analysis** — Demo-derived T/CT pistol, eco, force-buy and full-buy estimates, opening routes, possible lurks, observed planted sites and smoke/flash areas, with cited rounds. Available in Replay AI Recap and Anti-Strat for selected demos. [Free API setup and limitations](docs/ai-team-analysis.md).
-- **Match recap** — Narrative summaries highlighting turning points and standout players
+- **Team tactical analysis** — Structured scouting notes by T/CT and buy type: setups, timed movement, utility support, possible lurks, distinct plans and cited rounds. Available in Replay AI Recap and Anti-Strat for selected demos. [Free API setup and limitations](docs/ai-team-analysis.md).
+- **Match recap** — A quick bullet-point snapshot: result, key rounds, standout players, bomb/utility and what to review next
 - **Lineup descriptions** — Natural language explanations of what each lineup does
-- **Providers** — Groq Free is recommended for team analysis; OpenRouter free models are an alternative. Existing narrative/lineup features also support Anthropic. Tactical reports never fall back to paid providers.
+- **Providers** — Groq Free is recommended; OpenRouter free models are an alternative. Add/change a private key in **Settings → AI analysis** without restarting. Team reports and match snapshots never fall back to paid providers; older lineup-description features still support Anthropic.
 
 ---
 

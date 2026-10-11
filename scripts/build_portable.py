@@ -72,6 +72,11 @@ def main():
     shutil.copy2(ROOT / "packaging/portable.env.example", output / "portable.env.example")
     (output / "docs").mkdir(exist_ok=True)
     shutil.copy2(ROOT / "docs/ai-team-analysis.md", output / "docs/ai-team-analysis.md")
+    shutil.copy2(ROOT / "docs/windows-signing.md", output / "docs/windows-signing.md")
+    release_notes = ROOT / "docs/releases" / f"v{(ROOT / 'VERSION').read_text(encoding='utf-8').strip()}.md"
+    if release_notes.is_file():
+        (output / 'docs/releases').mkdir(exist_ok=True)
+        shutil.copy2(release_notes, output / 'docs/releases' / release_notes.name)
     copy_licenses(output / "third-party-licenses")
     if not args.without_archiver:
         source = ROOT / "build/vendor/7zip/extracted/Files/7-Zip"
