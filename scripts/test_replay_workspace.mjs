@@ -134,7 +134,7 @@ try {
   await page.getByRole('link', {name: 'AI Recap', exact: true}).click();
   await page.getByText('Test snapshot retained across workspace tabs.', {exact: true}).waitFor();
   assert.equal(recapCalls, 1, 'Recap survives navigation without another AI request');
-  await page.getByRole('link', {name: 'Insights', exact: true}).click();
+  await page.getByRole('link', {name: 'Round Utility', exact: true}).click();
   const teamPane = page.getByLabel('Insights team and player filters', {exact: true});
   await teamPane.waitFor();
   const cards = await teamPane.locator(':scope > section').evaluateAll(elements => elements.map(el => {

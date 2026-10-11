@@ -117,17 +117,21 @@ export default function PlayerDetailPage() {
 
   if (loading) {
     return (
-      <div className="h-screen flex items-center justify-center bg-[#0b1118]">
-        <span className="text-scout-muted text-sm">Loading profile...</span>
+      <div className="h-screen flex flex-col bg-[#0b1118]">
+        <AppHeader/>
+        <div className="flex-1 flex items-center justify-center"><span role="status" className="text-scout-muted text-sm">Loading profile…</span></div>
       </div>
     );
   }
 
   if (error || !detail) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-[#0b1118] gap-3">
-        <span className="text-scout-red text-sm">{error ?? "Profile not found"}</span>
-        <button onClick={() => navigate("/players")} className="hud-btn text-xs">← Players</button>
+      <div className="h-screen flex flex-col bg-[#0b1118]">
+        <AppHeader/>
+        <div className="flex-1 flex flex-col items-center justify-center gap-3">
+          <span role="alert" className="text-scout-red text-sm">{error ?? "Profile not found"}</span>
+          <button onClick={() => navigate("/players")} className="hud-btn text-xs">← Players</button>
+        </div>
       </div>
     );
   }

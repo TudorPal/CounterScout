@@ -127,7 +127,7 @@ export default function ReplayLayout() {
       <AppBackdrop tone="green" />
 
       <div className="relative flex flex-1 min-h-0">
-      <aside className="w-32 2xl:w-36 shrink-0 border-r border-white/5 bg-white/[0.015] flex flex-col p-2 gap-3 overflow-y-auto">
+      <aside className="w-36 lg:w-40 2xl:w-44 shrink-0 border-r border-white/5 bg-white/[0.015] flex flex-col p-2 gap-3 overflow-y-auto">
         <details className="relative group">
           <summary aria-label="Application navigation" className="list-none cursor-pointer rounded-lg hover:bg-white/5 flex items-center gap-2 p-2 text-xs text-white">
             <LogoMark className="w-4 h-4 shrink-0" /><span className="flex-1">CounterScout</span><span aria-hidden="true">⋮</span>

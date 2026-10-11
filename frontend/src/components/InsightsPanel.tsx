@@ -760,7 +760,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
              style={{ borderColor: "#fbbf24" }}>
           <span className="text-yellow-400">⚠</span>
           <span className="text-gray-300 flex-1">
-            This demo was parsed before aggregate stats were available — DMG, assists, and flash durations will show as "—". Swing uses a K-based proxy.
+            This older demo cache is missing some damage, assist or flash data. Re-parse for complete statistics; rating and swing remain local estimates.
           </span>
           <button
             onClick={handleReparse}

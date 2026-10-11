@@ -27,6 +27,7 @@ try {
     else if(path.endsWith('/ingest/status'))body={run_id:0,last_completed_run_id:0};
     else if(path==='/api/match-replay/demos')body=[];
     else if(path==='/api/players')body=[];
+    else if(path.startsWith('/api/players/'))return route.fulfill({status:404,contentType:'application/json',body:JSON.stringify({detail:'Profile not found'})});
     else if(path==='/api/player-hltv-ids')body={players:{},count:0};
     else if(path==='/api/maps')body={maps:[]};
     else if(path==='/api/demos')body={maps:[],total_demos:0};
@@ -92,6 +93,7 @@ try {
   await tools.getByRole('button',{name:'Settings',exact:true}).click();await page.getByRole('dialog',{name:'Settings'}).waitFor();await page.keyboard.press('Escape');
   await page.getByRole('link',{name:'Movement Patterns',exact:true}).click();
   await page.getByRole('heading',{name:'Movement Patterns',exact:true}).waitFor();
+  assert.equal(await page.getByRole('navigation',{name:'Demo views'}).locator('a[aria-current="page"]').count(),1);
   assert.equal(await page.getByText('Buy-phase economy',{exact:true}).count(),0);
   assert.equal(await page.getByRole('button',{name:'Patterns',exact:true}).count(),0,'Internal tabs are replaced by left navigation');
   const rounds=page.getByRole('navigation',{name:'Round selection'});
@@ -99,6 +101,7 @@ try {
   await rounds.getByRole('button',{name:'Round 2',exact:true}).click();assert.equal(await rounds.getByRole('button',{name:'Round 2',exact:true}).getAttribute('aria-pressed'),'true');
   await rounds.getByRole('button',{name:'Round 2',exact:true}).click();assert.equal(await rounds.getByRole('button',{name:'All rounds',exact:true}).getAttribute('aria-pressed'),'true');
   await page.getByRole('link',{name:'Utility Heatmap',exact:true}).click();
+  assert.equal(await page.getByRole('navigation',{name:'Demo views'}).locator('a[aria-current="page"]').count(),1);
   const circles=page.locator('.insights-radar-viewport svg circle[r="10"]');assert.equal(await circles.count(),2);
   await rounds.getByRole('button',{name:'Round 1',exact:true}).click();assert.equal(await circles.count(),1);
   await rounds.getByRole('button',{name:'All rounds',exact:true}).click();assert.equal(await circles.count(),2);
@@ -113,8 +116,13 @@ try {
   assert.equal(await rounds.getByRole('button',{name:'Round 1',exact:true}).getAttribute('aria-pressed'),'true');
   mkdirSync('.cache/ui-preview',{recursive:true});
   await page.screenshot({path:'.cache/ui-preview/workspace-controls-insights.png'});
+  const insightsPadding=await page.getByLabel('Insights radar workspace').evaluate(el=>getComputedStyle(el).padding);
   await page.getByRole('link',{name:'Replay',exact:true}).click();
   assert.deepEqual(await utilities.getByRole('button').allTextContents(),['Smoke','Flash','HE','Molotov','Decoy'],'Replay shares the same utility controls');
+  const replayPadding=await page.locator('.replay-stage').locator('..').evaluate(el=>getComputedStyle(el).padding);
+  assert.equal(insightsPadding,replayPadding,'Tactical radar and live Replay use matching panel padding');
+  await page.goto('http://127.0.0.1:5189/players/missing');
+  await page.getByRole('button',{name:'Settings',exact:true}).waitFor();
   await page.goto('http://127.0.0.1:5189/import');await page.setViewportSize({width:390,height:844});
   const mobileSettings=await page.getByRole('button',{name:'Settings',exact:true}).boundingBox();
   await page.goto('http://127.0.0.1:5189/lineups');

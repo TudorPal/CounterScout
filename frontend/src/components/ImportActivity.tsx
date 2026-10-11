@@ -102,11 +102,11 @@ export default function ImportActivityMenu({align = 'right'}: {align?: 'left' | 
       <div className="flex justify-between items-center gap-2"><h2 className="text-sm font-semibold text-white">Imports {active.length?`· ${active.length} active`:''}</h2><button aria-label="Close import history" onClick={()=>{setPosition(null);trigger.current?.focus();}} className="text-scout-muted px-2 py-1">×</button></div>
       {!items.length && <p className="text-xs text-scout-muted py-4">No recent imports. New uploads and FACEIT imports appear here.</p>}
       {visible.map(item => <div key={item.id} data-import-entry className="py-3 border-b border-white/5 last:border-0">
-        <p className="text-sm font-semibold text-white line-clamp-2 break-words" title={item.teamNames?.join(' vs ')||item.demo||item.label}>{item.teamNames?.join(' vs ')||item.demo||item.label}</p>
+        <p className="text-sm font-semibold text-white truncate" title={item.teamNames?.join(' vs ')||item.demo||item.label}>{item.teamNames?.join(' vs ')||item.demo||item.label}</p>
         {(item.teamNames?.length||item.demo) && <p className="text-xs text-scout-text mt-1 line-clamp-1" title={item.label}>{item.label}</p>}
         <p className="text-[10px] text-scout-muted mt-1">{item.state==='working'?'In progress':item.state==='done'?'Ready':'Failed'} · {new Date(item.updatedAt??Date.now()).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}</p>
-        {item.state === 'working' && (item.progress !== undefined ? <progress aria-label={item.label} max={100} value={item.progress} className="w-full accent-scout-accent"/> : <p className="text-xs text-scout-muted mt-1 animate-pulse">Please wait…</p>)}
-        {item.state==='working' && <p className="text-[10px] text-scout-muted">{item.progress!==undefined?`${item.progress}% · `:''}{item.etaSeconds!==undefined?`Upload ≈ ${item.etaSeconds<60?`${item.etaSeconds}s`:`${Math.ceil(item.etaSeconds/60)}m`} left; analysis follows`:'Remaining time unavailable for this stage'}</p>}
+        {item.state === 'working' && item.progress!==undefined && <progress aria-label={item.label} max={100} value={item.progress} className="w-full accent-scout-accent"/>}
+        {item.state==='working' && item.progress!==undefined && <p className="text-[10px] text-scout-muted">{item.progress}%{item.etaSeconds!==undefined?` · Upload ≈ ${item.etaSeconds<60?`${item.etaSeconds}s`:`${Math.ceil(item.etaSeconds/60)}m`} left; analysis follows`:''}</p>}
         {item.error && <p className="text-xs text-scout-red line-clamp-2 break-words" title={item.error}>{item.error}</p>}
         {item.demo && <Link onClick={()=>setPosition(null)} className="text-xs text-scout-accent" to={`/replay/${encodeURIComponent(item.demo)}`}>Replay →</Link>}
       </div>)}
