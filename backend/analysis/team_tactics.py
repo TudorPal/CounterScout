@@ -10,7 +10,7 @@ from pathlib import Path
 
 from backend.analysis import callouts
 
-EVIDENCE_VERSION = 2
+EVIDENCE_VERSION = 3
 BUYS = ("pistol", "eco", "force-buy", "full-buy", "mixed/unknown")
 RIFLES = {"ak47", "m4a1", "m4a1silencer", "aug", "sg556", "awp", "scar20", "g3sg1", "galilar", "famas"}
 PRIMARY = RIFLES | {"galilar", "famas", "mac10", "mp9", "mp7", "mp5sd", "ump45", "p90", "bizon", "nova", "xm1014", "mag7", "sawedoff", "negev", "m249", "ssg08"}
@@ -140,7 +140,7 @@ def extract_demo(bundle, roster, team_name, demo_file):
             site = "unknown"
         routes = {sid: [] for sid in active}
         frames = []
-        for seconds in (10, 20, 35, 50):
+        for seconds in (5, 10, 20, 35, 50, 75, 95):
             tick = anchor + rate*seconds
             if tick > end or plant and tick >= plant["tick"]:
                 break
@@ -151,6 +151,17 @@ def extract_demo(bundle, roster, team_name, demo_file):
                     frame[sid] = point
                     routes[sid].append({"seconds": seconds, "location": location(map_name, point["x"], point["y"])})
             frames.append((seconds, frame))
+        # Retake/post-plant holds are observations, not inferred reactions to enemies.
+        if plant:
+            for after in (0, 10, 20):
+                tick = plant["tick"] + rate*after
+                if tick > end:
+                    break
+                for sid in active:
+                    point = snapshot(positions[sid], ticks[sid], tick, start, rate)
+                    if point and point.get("alive") and point.get("tn") == side_num:
+                        routes[sid].append({"seconds": round((tick-anchor)/rate, 1), "phase": "postplant",
+                                            "location": location(map_name, point["x"], point["y"])})
         lurks = separated_players(frames) if side == "T" else {}
         utility = []
         for nade in bundle.get("grenades", []):
@@ -219,38 +230,73 @@ def build_evidence(sources, team_name, map_name):
     return {"version": EVIDENCE_VERSION, "team": team_name, "map": map_name, "demos": count,
             "rounds": rounds, "groups": groups, "skipped_rounds": skipped,
             "limitations": ["Buy labels are MR12 regulation/loadout estimates; partial buys remain mixed/unknown.",
-                            "Routes sample alive players at 10, 20, 35 and 50 seconds after freeze ends, until plant/end.",
+                            "Routes sample alive players at 5/10/20/35/50/75/95 seconds until plant/end, then at plant +0/10/20 seconds.",
                             "Site counts record the actual planted site, not every attempted hit; no plant is not a site hit.",
                             "Callouts are approximate nearest markers; radar grid A1-H8 is used where markers are unavailable.",
                             "Possible lurks mean sustained separation from at least three teammates, not proven intent.",
                             "Only the selected team's players and throws are included; disconnected slots are excluded."]}
 
 
-def prompt_evidence(evidence, budget=11000):
+def prompt_evidence(evidence, budget=9500, max_examples=3):
     """All group totals + diverse example rounds fit the free-tier token budget."""
     records = {r["id"]: r for r in evidence["rounds"]}
     digest = {k: evidence[k] for k in ("team", "map", "demos", "skipped_rounds", "limitations")}
+    digest["coverage"] = "Group totals include every eligible round; examples are a bounded selection, not the full game."
     digest["groups"] = []
     for group in evidence["groups"]:
         g = {k: group[k] for k in ("side", "buy", "rounds", "wins", "planted_sites")}
         g["common_utility"] = [{k: u[k] for k in ("type", "location", "throws", "rounds")} for u in group["common_utility"][:4]]
         g["examples"] = []
         digest["groups"].append(g)
+    candidates_by_group = []
+    for group in evidence["groups"]:
+        candidates = sorted((records[ref] for ref in group["round_refs"]), key=lambda r: (-bool(r["possible_lurks"]), -len(r["utility"]), r["id"]))
+        seen, diverse, repeated = set(), [], []
+        for candidate in candidates:
+            signature = (candidate["planted_site"], tuple(sorted(
+                (route["samples"][0]["location"], route["samples"][-1]["location"])
+                for route in candidate["routes"] if route["samples"])))
+            (repeated if signature in seen else diverse).append(candidate)
+            seen.add(signature)
+        candidates_by_group.append(diverse + repeated)
+
+    def make_example(r, detail):
+        example = {k: r[k] for k in ("id", "active_players", "won", "planted_site", "plant_seconds", "possible_lurks")}
+        example["route_detail"] = detail
+        example["routes"] = []
+        for route in r["routes"]:
+            if detail == 'sampled':
+                compressed = []
+                for sample in route["samples"]:
+                    phase = sample.get("phase", "preplant")
+                    if compressed and compressed[-1]["location"] == sample["location"] and compressed[-1]["phase"] == phase:
+                        compressed[-1]["end"] = sample["seconds"]
+                    else:
+                        compressed.append({"start": sample["seconds"], "end": sample["seconds"], "location": sample["location"], "phase": phase})
+                text = " > ".join(f"{s['start']}{'-'+str(s['end']) if s['end']!=s['start'] else ''}s {s['location']}{' postplant' if s['phase']=='postplant' else ''}" for s in compressed)
+            else:
+                samples = route['samples'][:1] if detail == 'opening-only' else (route['samples'] if len(route['samples']) < 2 else [route['samples'][0], route['samples'][-1]])
+                text = " > ".join(f"{s['seconds']}s {s['location']}{' postplant' if s.get('phase')=='postplant' else ''}" for s in samples)
+            if text:
+                example['routes'].append(route['player']+': '+text)
+        limit = 10 if detail == 'sampled' else 3 if detail == 'first/last-only' else 1
+        example['utility'] = [f"{u['seconds']}s {u['player']} {u['type']}: {u['from']} > {u['to']} ({u['phase']})" for u in r['utility'][:limit]]
+        return example
+
+    size = lambda data: len(json.dumps(data, ensure_ascii=False, separators=(',', ':')))
+    minimums = [size(make_example(c[0], 'opening-only')) + 1 if c else 0 for c in candidates_by_group]
     available = []
-    # Prefer tactical examples with utility/lurk observations, but totals use ALL rounds.
-    for example_index in range(2):
-        for group, target in zip(evidence["groups"], digest["groups"]):
-            candidates = sorted((records[ref] for ref in group["round_refs"]), key=lambda r: (-bool(r["possible_lurks"]), -len(r["utility"]), r["id"]))
+    # Reserve space for each side/buy before spending it on richer/repeated examples.
+    for example_index in range(max_examples):
+        for group_index, (candidates, target) in enumerate(zip(candidates_by_group, digest['groups'])):
             if example_index >= len(candidates):
                 continue
             r = candidates[example_index]
-            example = {k: r[k] for k in ("id", "active_players", "won", "planted_site", "possible_lurks")}
-            example["routes"] = [route["player"]+": "+" > ".join(f"{s['seconds']}s {s['location']}" for s in route["samples"]) for route in r["routes"]]
-            example["utility"] = [f"{u['seconds']}s {u['player']} {u['type']}: {u['from']} > {u['to']} ({u['phase']})" for u in r["utility"][:10]]
-            target["examples"].append(example)
-            if len(json.dumps(digest, ensure_ascii=False, separators=(",", ":"))) > budget:
-                target["examples"].pop()
-            else:
-                available.append(r["id"])
-    digest["coverage"] = "Group totals include every eligible round; examples are a bounded selection, not the full game."
+            reserve = sum(minimums[group_index+1:]) if example_index == 0 else 0
+            for detail in ('sampled', 'first/last-only', 'opening-only'):
+                target['examples'].append(make_example(r, detail))
+                if size(digest) + reserve <= budget:
+                    available.append(r['id'])
+                    break
+                target['examples'].pop()
     return digest, available

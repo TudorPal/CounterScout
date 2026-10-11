@@ -54,6 +54,28 @@ class TeamTacticsTests(unittest.TestCase):
         self.assertEqual((r['side'],r['active_players'],r['equipment']),('CT',4,20000))
         self.assertNotIn('E',[p['player'] for p in r['routes']])
 
+    def test_later_moves_and_postplant_samples_keep_actual_elapsed_times(self):
+        bundle,roster=fixture()
+        # A plant 25 seconds after freeze leaves time for all post-plant samples.
+        bundle['events'][0]['tick']=350
+        evidence=tactics.build_evidence([('demo.dem',bundle,roster)],'Scouted','de_mirage')
+        samples=evidence['rounds'][0]['routes'][0]['samples']
+        self.assertEqual([s['seconds'] for s in samples if s.get('phase')=='postplant'],[25,35,45])
+        self.assertEqual([s['seconds'] for s in samples if s.get('phase')!='postplant'],[5,10,20])
+        self.assertIn(75,[s['seconds'] for s in evidence['rounds'][1]['routes'][0]['samples']])
+        digest,_=tactics.prompt_evidence(evidence)
+        self.assertIn('postplant',json.dumps(digest))
+
+    def test_prompt_prefers_different_plans_before_repeated_ones(self):
+        bundle,roster=fixture()
+        evidence=tactics.build_evidence([('demo.dem',bundle,roster)],'Scouted','de_mirage')
+        group=next(g for g in evidence['groups'] if g['side']=='T' and g['buy']=='full-buy')
+        selected=[r for r in evidence['rounds'] if r['id'] in group['round_refs']]
+        selected[-1]['planted_site']='A'
+        digest,_=tactics.prompt_evidence(evidence,max_examples=2)
+        examples=next(g['examples'] for g in digest['groups'] if g['side']=='T' and g['buy']=='full-buy')
+        self.assertEqual({r['planted_site'] for r in examples},{'none','A'})
+
     def test_classification_uses_loadout_presence_and_depleted_cash(self):
         full={'eq':5000,'inv':['ak47'],'ar':100,'cash':200,'cs':4000}
         self.assertEqual(tactics.buy_type([full]*4,14),'full-buy')
@@ -90,7 +112,8 @@ class TeamTacticsTests(unittest.TestCase):
         bundle,roster=fixture()
         evidence=tactics.build_evidence([(f'demo{i}.dem',bundle,roster) for i in range(12)],'Scouted','de_mirage')
         digest,refs=tactics.prompt_evidence(evidence)
-        self.assertLess(len(json.dumps(digest,ensure_ascii=False,separators=(',',':'))),16000)
+        self.assertLessEqual(len(json.dumps(digest,ensure_ascii=False,separators=(',',':'))),9500)
+        self.assertTrue(all(g['examples'] for g in digest['groups']),'Every group gets an example before richer/repeated rounds')
         self.assertEqual(sum(g['rounds'] for g in digest['groups']),168)
         self.assertTrue(set(refs)<={r['id'] for r in evidence['rounds']})
         self.assertEqual(len(digest['groups']),len(evidence['groups']))
