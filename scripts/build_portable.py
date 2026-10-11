@@ -70,6 +70,8 @@ def main():
     shutil.copy2(ROOT / "VERSION", output / "VERSION")
     shutil.copy2(ROOT / "packaging/PORTABLE-README.txt", output / "README.txt")
     shutil.copy2(ROOT / "packaging/portable.env.example", output / "portable.env.example")
+    (output / "docs").mkdir(exist_ok=True)
+    shutil.copy2(ROOT / "docs/ai-team-analysis.md", output / "docs/ai-team-analysis.md")
     copy_licenses(output / "third-party-licenses")
     if not args.without_archiver:
         source = ROOT / "build/vendor/7zip/extracted/Files/7-Zip"

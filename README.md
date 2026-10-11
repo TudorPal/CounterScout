@@ -143,9 +143,11 @@ Accessed from the Insights tab within any loaded demo:
 - **Status tracking** — Real-time progress for download, extraction, parsing, and analysis phases
 
 ### AI Features
+
+- **Team tactical analysis** — Demo-derived T/CT pistol, eco, force-buy and full-buy estimates, opening routes, possible lurks, observed planted sites and smoke/flash areas, with cited rounds. Available in Replay AI Recap and Anti-Strat for selected demos. [Free API setup and limitations](docs/ai-team-analysis.md).
 - **Match recap** — Narrative summaries highlighting turning points and standout players
 - **Lineup descriptions** — Natural language explanations of what each lineup does
-- **Dual provider** — Claude (Anthropic) or OpenRouter (free tier)
+- **Providers** — Groq Free is recommended for team analysis; OpenRouter free models are an alternative. Existing narrative/lineup features also support Anthropic. Tactical reports never fall back to paid providers.
 
 ---
 
@@ -198,11 +200,12 @@ HLTV_REQUEST_DELAY=2.5    # seconds between requests — be polite
 DBSCAN_EPS=75.0           # world-unit radius (decrease for tighter clusters)
 DBSCAN_MIN_SAMPLES=5      # minimum throws to form a cluster
 
-# ── AI features (pick one) ────────────────────────────────────────────────────
-OPENROUTER_API_KEY=sk-or-...
-OPENROUTER_MODEL=google/gemma-3-27b-it:free
-# or
-ANTHROPIC_API_KEY=sk-ant-...
+# ── AI team analysis (free account, own private key) ──────────────────────────
+TEAM_AI_PROVIDER=groq
+GROQ_API_KEY=your_private_key_here
+GROQ_MODEL=openai/gpt-oss-120b
+# Alternative: TEAM_AI_PROVIDER=openrouter, OPENROUTER_API_KEY=..., OPENROUTER_MODEL=openrouter/free
+# ANTHROPIC_API_KEY is optional for legacy narrative/lineup features, not team analysis.
 ```
 
 ### Run

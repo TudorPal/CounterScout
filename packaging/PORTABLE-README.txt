@@ -27,6 +27,7 @@ If tools/ was deliberately omitted, installed archivers/Windows tar are used;
 some archives may require 7-Zip. Plain DEM and FACEIT uploads do not need it.
 
 AI recaps are optional and need your own AI provider key.
+For a free Groq key and team tactical reports, see docs/ai-team-analysis.md.
 Copy portable.env.example to user-data/.env, fill in a key, then restart.
 Never send your configured .env or user-data folder to other people.
 
