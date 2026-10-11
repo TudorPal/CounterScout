@@ -9,7 +9,7 @@ export function snapshotAt(samples: TimelinePosition[] | undefined, tick: number
   if (!samples?.length) return undefined;
   let lo = 0, hi = samples.length;
   while (lo < hi) { const mid = (lo + hi) >>> 1; if (samples[mid].t <= tick) lo = mid + 1; else hi = mid; }
-  return samples[Math.max(0, lo - 1)];
+  return lo ? samples[lo - 1] : undefined;
 }
 
 export const roundAnchor = (round: TimelineRound) => round.freeze_end_tick ?? Math.min(round.start_tick + 320, round.end_tick);
@@ -30,6 +30,13 @@ export function matchIdentity(timeline: MatchTimeline, info?: MatchInfoResponse 
     if (members[p.steamid] === 2) votes[2]++; else if (members[p.steamid] === 3) votes[3]++;
   }
   const team1: Side = votes[3] > votes[2] ? 3 : 2;
+  // Late joiners/disconnected players may have a misleading modal uniform.
+  // Explicit roster membership remains authoritative after halftime.
+  for (const [roster, team] of [[info?.team1, team1], [info?.team2, team1 === 2 ? 3 : 2]] as const) {
+    const rosterIds = new Set((roster?.players_detailed ?? []).map(p=>p.steamid).filter(Boolean));
+    const rosterNames = new Set((roster?.players ?? []).map(n=>n.trim().toLowerCase()));
+    for(const p of timeline.players) if(rosterIds.has(p.steamid) || rosterNames.has(p.name.trim().toLowerCase()))members[p.steamid]=team;
+  }
   const labels: Record<number, string> = info?.team1 && info?.team2 ? {
     [team1]: info.team1.name, [team1 === 2 ? 3 : 2]: info.team2.name,
   } : {2: "Terrorists", 3: "Counter-Terrorists"};
@@ -39,12 +46,16 @@ export type MatchIdentity = ReturnType<typeof matchIdentity>;
 
 /** A team is a stable cohort of players; T/CT is a changing uniform. */
 export function teamSide(timeline: MatchTimeline, identity: MatchIdentity, team: number, tick: number): Side {
-  let t = 0, ct = 0;
-  for (const p of timeline.players) if (identity.members[p.steamid] === team) {
-    const side = snapshotAt(timeline.positions[p.steamid], tick)?.tn;
-    if (side === 2) t++; else if (side === 3) ct++;
+  const round=timeline.rounds.find(r=>r.start_tick<=tick && r.end_tick>=tick);
+  let t = 0, ct = 0, oppositeT=0, oppositeCt=0;
+  for (const p of timeline.players) {
+    const sample = snapshotAt(timeline.positions[p.steamid], tick);
+    if(!sample || round && sample.t<round.start_tick)continue;
+    const side=sample.tn;
+    if(identity.members[p.steamid]===team) {if(side===2)t++;else if(side===3)ct++;}
+    else if(identity.members[p.steamid]=== (team===2?3:2)) {if(side===2)oppositeT++;else if(side===3)oppositeCt++;}
   }
-  return ct > t ? 3 : t > ct ? 2 : team as Side;
+  return ct > t ? 3 : t > ct ? 2 : oppositeCt>oppositeT?2:oppositeT>oppositeCt?3:team as Side;
 }
 
 export function scoreAt(timeline: MatchTimeline, identity: MatchIdentity, tick = Infinity) {

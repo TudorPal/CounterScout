@@ -1,14 +1,18 @@
 import type {MatchTimeline} from "../api/client";
-import {snapshotAt, teamSide, type MatchIdentity, type Side} from "./replayState";
+import {roundAnchor, snapshotAt, teamSide, type MatchIdentity, type Side} from "./replayState";
 
 export type ReplaySideFilter = "all" | Side;
 export type ReplayTeamFilter = "all" | "2" | "3";
 
 /** Roster membership is stable; the player's uniform changes at every swap. */
 export function playerSideAt(timeline: MatchTimeline, identity: MatchIdentity, sid: string, tick: number): Side | undefined {
+  const team = identity.members[sid];
+  const round=timeline.rounds.find(r=>tick>=r.start_tick && tick<=r.end_tick);
+  // A disconnected player's last uniform must not admit an opposing-side
+  // round into the entire focused roster's Patterns view.
+  if(round && (team===2 || team===3))return teamSide(timeline,identity,team,roundAnchor(round));
   const side = snapshotAt(timeline.positions[sid], tick)?.tn;
   if (side === 2 || side === 3) return side;
-  const team = identity.members[sid];
   return team === 2 || team === 3 ? teamSide(timeline, identity, team, tick) : undefined;
 }
 
