@@ -46,7 +46,7 @@ export interface FaceitBridgeLibrary {
 }
 export const getFaceitBridgeSetup = async () => (await api.get<{token:string;downloads_dir:string;extension_path:string;last_seen:string|null;extension_version?:string;required_version:string;automation_ready:boolean}>("/ingest/faceit/bridge/setup")).data;
 export const configureFaceitDownloads = async (downloads_dir:string) => (await api.put("/ingest/faceit/bridge/setup",{downloads_dir})).data;
-export const getFaceitBridgeLibrary = async () => (await api.get<FaceitBridgeLibrary>("/ingest/faceit/bridge/library")).data;
+export const getFaceitBridgeLibrary = async (includeMatches=true) => (await api.get<FaceitBridgeLibrary>("/ingest/faceit/bridge/library",{params:{include_matches:includeMatches}})).data;
 export const fetchFaceitTeamMatches = async (team_url:string) => (await api.post<{team_id:string|null;command_id:string}>("/ingest/faceit/bridge/teams",{team_url})).data;
 export const downloadBridgedFaceitMatch = async (match_id:string) => (await api.post<{command_id:string}>("/ingest/faceit/bridge/downloads",{match_id})).data;
 

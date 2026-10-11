@@ -14,17 +14,20 @@ try {
   await page.route('**/api/**',async route=>{
     const path=new URL(route.request().url()).pathname;
     const imports=[{id:'old',state:'done',demo_file:'old.dem'}];
-    if(state!=='initial')imports.push({id:'new',state,demo_file:state==='done'?'new.dem':null});
+    if(state!=='initial'&&state!=='downloading')imports.push({id:'new',match_id:'room',state,demo_file:state==='done'?'new.dem':null});
+    const commands=state==='initial'?[]:[{id:'download',kind:'download',match_id:'room',state:state==='downloading'?'queued':state==='importing'?'running':'done',download_count:state==='done'?1:0}];
     const timeline={tick_rate:64,tick_max:100,map_name:'de_anubis',players:[],rounds:[{num:1,start_tick:0,freeze_end_tick:10,end_tick:100,winner:'T'}],events:[],grenades:[],positions:{}};
-    const body=path.endsWith('/bridge/library')?{matches:[],commands:[],imports}:path.endsWith('/ingest/status')?{run_id:0,last_completed_run_id:0}:path.endsWith('/demos')?[]:path.endsWith('/timeline')?timeline:path.endsWith('/revision')?{revision:'import-menu-fixture'}:path.includes('/radars/')?{pos_x:0,pos_y:1024,scale:1}:{};
+    const body=path.endsWith('/bridge/library')?{matches:[],commands,imports}:path.endsWith('/ingest/status')?{run_id:0,last_completed_run_id:0}:path.endsWith('/demos')?[]:path.endsWith('/timeline')?timeline:path.endsWith('/revision')?{revision:'import-menu-fixture'}:path.includes('/radars/')?{pos_x:0,pos_y:1024,scale:1}:{};
     await route.fulfill({contentType:'application/json',body:JSON.stringify(body)});
   });
   await page.goto('http://127.0.0.1:5189/replay');
   await page.waitForTimeout(400);
   assert.equal(await page.getByText('FACEIT demo ready',{exact:true}).count(),0,'No historical notification flood');
-  state='importing';
+  state='downloading';
   await page.getByLabel('Import activity',{exact:true}).waitFor();
   await page.getByLabel('Import activity',{exact:true}).click();
+  await page.getByText('Waiting for extension…',{exact:true}).waitFor();
+  state='importing';
   await page.getByText('Analysing FACEIT demo',{exact:true}).waitFor();
   await page.getByRole('link',{name:'Anti-Strat',exact:true}).click();
   await page.getByLabel('Import activity',{exact:true}).waitFor();
@@ -41,6 +44,11 @@ try {
   assert.equal(await page.getByLabel('Import progress',{exact:true}).count(),0);
   await page.getByLabel('Dismiss import notification').click();
   assert.equal(await page.getByRole('link',{name:'Open replay →',exact:true}).count(),0);
+  await page.getByLabel('Import activity',{exact:true}).click();
+  assert.ok(await page.getByLabel('Import progress',{exact:true}).getByRole('link',{name:'Replay →',exact:true}).count(),'Dismissing the toast preserves replay links in history');
+  await page.keyboard.press('Escape');
+  await page.reload();await page.waitForTimeout(400);
+  assert.equal(await page.getByRole('link',{name:'Open replay →',exact:true}).count(),0,'Reload restores history without historical toasts');
   assert.deepEqual(errors,[]);
-  console.log('Import notifications: initial history suppressed, extension parsing visible across routes, completion Replay action and dismissal passed.');
+  console.log('Import notifications: silent history restore, waiting/download stages, parsing across routes, completion Replay links and non-destructive dismissal passed.');
 } finally {await browser?.close();await server.httpServer.close();}

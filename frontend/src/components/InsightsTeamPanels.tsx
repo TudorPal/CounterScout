@@ -28,10 +28,10 @@ export default function InsightsTeamPanels({timeline, identity, round, teams, se
         <div className="flex items-center gap-2 pb-1.5 border-b border-white/10">
           <input type="checkbox" aria-label={`Show ${label} players`} checked={players.length > 0 && players.every(p => selected.has(p.steamid))} onChange={() => onToggleTeam(team)} className="accent-scout-accent w-3.5 h-3.5 shrink-0" />
           <h2 className="text-sm font-bold truncate flex-1" style={{color}} title={label}>{label}</h2>
-          <span className="text-[9px] rounded px-1 font-bold" style={{background: color, color: '#0b1118'}}>{side === 2 ? 'T' : 'CT'}</span>
+          {round && <span className="text-[9px] rounded px-1 font-bold" style={{background: color, color: '#0b1118'}}>{side === 2 ? 'T' : 'CT'}</span>}
           <span className="font-mono text-base font-bold text-white">{wins[team]}</span>
         </div>
-        <p className="text-[10px] font-mono text-scout-muted my-1 truncate">Cash {money(economy[side].known ? economy[side].cash : null)} · equip {money(economy[side].equipment)}</p>
+        {round ? <p className="text-[10px] font-mono text-scout-muted my-1 truncate">Cash {money(economy[side].known ? economy[side].cash : null)} · equip {money(economy[side].equipment)}</p> : <p className="text-[10px] text-scout-muted my-1">Match totals · all rounds</p>}
         <div className="grid gap-1 text-[11px] text-scout-muted uppercase px-1 pb-1" style={{gridTemplateColumns: columns}}>
           <span /><span>Player</span><span className="text-right" title={ESTIMATE_DESCRIPTION}>Swing ≈</span><span className="text-right">DMG</span><span className="text-right">K/D/A</span>
         </div>
@@ -41,7 +41,7 @@ export default function InsightsTeamPanels({timeline, identity, round, teams, se
           const swingColor = p.swingPct > 0 ? '#4ade80' : p.swingPct < 0 ? '#f87171' : '#94a3b8';
           return <label key={p.steamid} data-player-id={p.steamid} className={`grid gap-1 items-center px-1 py-1 rounded cursor-pointer text-xs hover:bg-white/5 ${checked ? '' : 'opacity-40'}`} style={{gridTemplateColumns: columns}}>
             <input type="checkbox" aria-label={`Show ${p.name}`} checked={checked} onChange={() => onTogglePlayer(p.steamid)} className="accent-scout-accent w-3.5 h-3.5" />
-            <span className="min-w-0"><span className="block text-white font-semibold truncate text-[13px]" title={p.name}>{p.name}</span><span className="block truncate text-[10px] font-mono text-scout-muted" title={cash}>{cash}</span></span>
+            <span className="min-w-0"><span className="block text-white font-semibold truncate text-[13px]" title={p.name}>{p.name}</span>{round && <span className="block truncate text-[10px] font-mono text-scout-muted" title={cash}>{cash}</span>}</span>
             <span className="font-mono font-bold text-right" style={{color: swingColor}}>{p.swingPct >= 0 ? '+' : ''}{p.swingPct.toFixed(1)}%</span>
             <span className="font-mono text-right text-gray-300">{p.hasRealAggregates ? p.dmg : '—'}</span>
             <span className="font-mono text-right text-gray-300">{p.kills}/{p.deaths}/{p.assists}</span>

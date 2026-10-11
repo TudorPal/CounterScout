@@ -16,7 +16,7 @@ The first unsigned build may trigger Windows SmartScreen. Only run trusted files
 FACEIT automatic imports (optional):
 - Open chrome://extensions and enable Developer mode.
 - Choose Load unpacked and select this bundle's browser-extension folder.
-- Open Import in CounterScout and follow the pairing/Downloads-folder steps.
+- Open Settings > FACEIT extension for pairing and Downloads-folder setup.
 - Stay signed in to FACEIT in Chrome. No FACEIT API key is required for the bridge.
 - After an update, reload the extension if its files changed.
 

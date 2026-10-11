@@ -1,7 +1,7 @@
 import { ReactNode } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import LogoMark from "./LogoMark";
-import ImportActivityMenu from './ImportActivity';
+import AppTools from './AppTools';
 
 /**
  * Shared top-of-page navigation. Every page (landing + every sub-page)
@@ -58,7 +58,8 @@ export default function AppHeader({ actions, middle }: AppHeaderProps) {
             </div>
           )}
         </nav>
-        <div className="app-header-actions"><ImportActivityMenu />{actions}</div>
+        <div className="app-header-actions"><AppTools/></div>
+        {actions && <div className="app-header-page-actions">{actions}</div>}
       </div>
     </header>
   );

@@ -404,17 +404,9 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
   const [patternPlaying, setPatternPlaying] = useState(false);
   const [patternPlayTime, setPatternPlayTime] = useState(15);
   const [patternSpeed, setPatternSpeed] = useState(1);
-  // When set, patterns mode drills into a single round and shows ALL 10
-  // players (not just the focused one). Pick "All rounds" in the dropdown
-  // to exit back to the multi-round overlay.
+  // Shared round focus for Heatmap/Patterns. The top strip is the sole picker;
+  // selecting a focused round again clears it. Round Utility stays single-round.
   const [patternRoundFocus, setPatternRoundFocus] = useState<number | null>(null);
-  // The round ribbon at the top of Insights also drills into patterns when
-  // patterns mode is active — clicking R12 there focuses R12 here too.
-  useEffect(() => {
-    if (radarMode === "patterns" && patternRoundFocus !== null) {
-      setPatternRoundFocus(currentRound);
-    }
-  }, [currentRound]); // eslint-disable-line react-hooks/exhaustive-deps
   const PATTERN_MAX_SECONDS = 115;
   const patternRafRef = useRef<number | null>(null);
   useEffect(() => {
@@ -565,13 +557,14 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
       if (!radarFilterSids.has(g.thrower)) continue;
       if (!heatmapTypeFilter.has(utilityCategory(g.type))) continue;
       const throwTick = g.points[0]?.[0];
+      if(patternRoundFocus!==null){const round=timeline.rounds.find(r=>r.num===patternRoundFocus);if(!round||throwTick==null||throwTick<round.start_tick||throwTick>round.end_tick)continue;}
       if (throwTick == null || (radarSideFocus !== "all" && playerSideAt(timeline, identity, g.thrower, throwTick) !== radarSideFocus)) continue;
       const last = g.points[g.points.length - 1];
       if (!last) continue;
       out.push({ x: last[1], y: last[2], type: g.type });
     }
     return out;
-  }, [timeline, identity, radarMode, radarFilterSids, heatmapTypeFilter, radarSideFocus]);
+  }, [timeline, identity, radarMode, radarFilterSids, heatmapTypeFilter, radarSideFocus, patternRoundFocus]);
 
   // PATTERNS mode (live frame). Two sub-modes:
   //   • Aggregate: every round × focused player(s), one dot per round at the
@@ -752,15 +745,17 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
 
   useEffect(() => {
     if (!onRoundStatus || !currentRoundObj) return;
-    const wins = scoreAt(timeline, identity, currentRoundObj.end_tick);
-    onRoundStatus({team1Score:wins[identity.team1],team2Score:wins[identity.team1 === 2 ? 3 : 2],round:currentRound,
-      team1CurrentSide:teamSide(timeline,identity,identity.team1,roundAnchor(currentRoundObj)),
+    const wins = scoreAt(timeline, identity, radarMode!=='round'&&patternRoundFocus===null?undefined:currentRoundObj.end_tick);
+    onRoundStatus({team1Score:wins[identity.team1],team2Score:wins[identity.team1 === 2 ? 3 : 2],round:radarMode!=='round'&&patternRoundFocus===null?0:currentRound,
+      team1CurrentSide:radarMode!=='round'&&patternRoundFocus===null?undefined:teamSide(timeline,identity,identity.team1,roundAnchor(currentRoundObj)),
       currentTimeStr:"",totalTimeStr:"",mapName:timeline.map_name});
-  }, [timeline,identity,currentRound,currentRoundObj,onRoundStatus]);
+  }, [timeline,identity,currentRound,currentRoundObj,onRoundStatus,radarMode,patternRoundFocus]);
 
   return (
     <div className="h-full flex flex-col gap-2 p-2 overflow-hidden">
-      <RoundOverview timeline={timeline} identity={identity} selected={currentRound} onSelect={setCurrentRound}
+      <RoundOverview timeline={timeline} identity={identity} selected={radarMode==='round'?currentRound:patternRoundFocus}
+        onSelect={num=>{setCurrentRound(num);if(radarMode!=='round')setPatternRoundFocus(previous=>previous===num?null:num);}}
+        onAll={radarMode==='round'?undefined:()=>setPatternRoundFocus(null)}
         markers={Object.fromEntries(roundSummaries.map(r => [r.num, [r.isPistol ? "Pistol" : "", r.isForceBuyWin ? "Force-buy conversion" : "", r.isStreakBreaker ? "Streak breaker" : "", r.aliveSwing ? "Alive swing" : ""].filter(Boolean)]))} />
 
       {/* Re-parse banner when aggregates are missing */}
@@ -785,7 +780,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
 
         {/* Radar workspace: fixed team docks are siblings of the zoom viewport. */}
         <div aria-label="Insights radar workspace" className="flex-1 min-w-0 h-full hud-panel p-2 overflow-hidden flex flex-col items-center">
-          <div className="w-full"><ReplayEconomy timeline={timeline} tick={currentRoundObj ? roundAnchor(currentRoundObj) : 0} label="Buy-phase economy" /></div>
+          {(radarMode==='round'||patternRoundFocus!==null)&&<div className="w-full"><ReplayEconomy timeline={timeline} tick={currentRoundObj ? roundAnchor(currentRoundObj) : 0} label="Buy-phase economy" /></div>}
           <div className="flex items-center gap-2 flex-wrap mb-1 w-full">
             {/* Mode tabs — round / heatmap / patterns */}
             <div className="flex items-center gap-1">
@@ -884,21 +879,6 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
 
               {radarMode === "patterns" && (
                 <>
-                  {/* Round picker — "All rounds" overlays every round; pick
-                      a specific one to drill in (also unlocks all 10 players). */}
-                  <label className="text-[10px] text-scout-muted uppercase tracking-wider font-mono">Round</label>
-                  <Select
-                    value={patternRoundFocus == null ? "all" : String(patternRoundFocus)}
-                    onChange={(v) => setPatternRoundFocus(v === "all" ? null : Number(v))}
-                    minWidth={110}
-                    options={[
-                      { value: "all", label: "All rounds" },
-                      ...timeline.rounds.map((r) => ({
-                        value: String(r.num),
-                        label: `R${r.num}${r.winner ? ` · ${r.winner}` : ""}`,
-                      })),
-                    ]}
-                  />
                   <button
                     onClick={() => setPatternPlaying((v) => !v)}
                     className="hud-btn text-[10px] py-0.5 px-2"
@@ -1152,7 +1132,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
                         return (
                           <g
                             style={{ cursor: patternRoundFocus === null ? "pointer" : "default" }}
-                            onClick={patternRoundFocus === null ? () => setPatternRoundFocus(fr.round) : undefined}
+                            onClick={patternRoundFocus === null ? () => {setPatternRoundFocus(fr.round);setCurrentRound(fr.round);} : undefined}
                           >
                             <g transform={`rotate(${yawDeg} ${px} ${py})`}>
                               <path
@@ -1497,7 +1477,7 @@ export default function InsightsPanel({ timeline, radar, matchInfo, demoFile, on
               <div className="w-full h-full flex items-center justify-center text-scout-muted">Loading radar…</div>
             )}
           </div>
-          <InsightsTeamPanels timeline={timeline} identity={identity} round={currentRoundObj} teams={sortedTeams} selected={selectedSids} onTogglePlayer={toggleSid} onToggleTeam={toggleTeam} />
+          <InsightsTeamPanels timeline={timeline} identity={identity} round={radarMode!=='round'&&patternRoundFocus===null?undefined:currentRoundObj} teams={sortedTeams} selected={selectedSids} onTogglePlayer={toggleSid} onToggleTeam={toggleTeam} />
           </div>{/* /insights-stage */}
         </div>
 

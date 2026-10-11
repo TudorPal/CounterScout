@@ -14,7 +14,7 @@ export default function ImportPage() {
   const navigate = useNavigate();
   const hero = useReveal<HTMLDivElement>();
   const body = useReveal<HTMLDivElement>();
-  const [tab, setTab] = useState<Tab>("hltv");
+  const [tab, setTab] = useState<Tab>("faceit");
 
   return (
     <div className="relative h-screen flex flex-col overflow-hidden bg-[#0b1118]">

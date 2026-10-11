@@ -72,6 +72,16 @@ class BridgeTests(unittest.TestCase):
         self.assertEqual(match["team1"]["score"], 0)
         self.assertEqual(match["team1"]["steamids"], ["76561198000000001"])
 
+    def test_status_only_library_keeps_jobs_without_transferring_matches(self):
+        self.post('/matches', {'team_id': TEAM, 'matches': [metadata()]})
+        self.client.post(PREFIX+'/teams', json={'team_url': f'https://www.faceit.com/en/teams/{TEAM}'})
+        full=self.client.get(PREFIX+'/library').json()
+        light=self.client.get(PREFIX+'/library?include_matches=false').json()
+        self.assertEqual(len(full['matches']),1)
+        self.assertEqual(light['matches'],[])
+        self.assertEqual(light['commands'],full['commands'])
+        self.assertEqual(light['imports'],full['imports'])
+
     def test_reviewed_names_survive_resync_and_are_used_for_download_import(self):
         self.post("/matches", {"team_id": TEAM, "matches": [metadata()],
                   "reviewed_names": {MATCH: {"faction1": "My reviewed team"}}})

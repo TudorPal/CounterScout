@@ -463,11 +463,11 @@ def install_faceit_bridge(app, upload_demo, store=None):
         return {"saved": count}
 
     @router.get("/library", dependencies=[Depends(app_only)])
-    def library():
+    def library(include_matches: bool = True):
         with store.connect() as db:
             store.reconcile_imports(db)
             store.expire(db)
-            return {"matches": [{**json.loads(r["data"]), "team_id": r["team_id"]} for r in db.execute("SELECT * FROM matches ORDER BY updated DESC LIMIT 200")],
+            return {"matches": [{**json.loads(r["data"]), "team_id": r["team_id"]} for r in db.execute("SELECT * FROM matches ORDER BY updated DESC LIMIT 200")] if include_matches else [],
                     "commands": [{"id": r["id"], "state": r["state"], "error": r["error"], "created": r["created"], "stage": r["stage"],
                                   **json.loads(r["data"])} for r in db.execute("SELECT * FROM commands ORDER BY created DESC LIMIT 30")],
                     "imports": [dict(r) for r in db.execute("SELECT * FROM imports ORDER BY created DESC LIMIT 30")]}

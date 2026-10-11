@@ -1,6 +1,6 @@
 import {useEffect,useState} from "react";
 import {Link} from "react-router-dom";
-import {configureFaceitDownloads,downloadBridgedFaceitMatch,fetchFaceitTeamMatches,getFaceitBridgeLibrary,getFaceitBridgeSetup,FaceitBridgeLibrary} from "../api/client";
+import {downloadBridgedFaceitMatch,fetchFaceitTeamMatches,getFaceitBridgeLibrary,getFaceitBridgeSetup,FaceitBridgeLibrary} from "../api/client";
 import SearchableSelect from "./SearchableSelect";
 import Select from "./Select";
 import {bridgeMatchState} from "../utils/faceitBridgeState";
@@ -24,7 +24,6 @@ export default function FaceitBridgePanel() {
   const [url,setUrl]=useState(()=>localStorage.getItem(LAST_TEAM) || "");
   const [setup,setSetup]=useState<Awaited<ReturnType<typeof getFaceitBridgeSetup>>|null>(null);
   const [data,setData]=useState<FaceitBridgeLibrary>({matches:[],commands:[],imports:[]});
-  const [folder,setFolder]=useState("");
   const [error,setError]=useState<string|null>(null), [busy,setBusy]=useState(false);
   const [filter,setFilter]=useState("all"), [team,setTeam]=useState("all");
   const [teamQuery,setTeamQuery]=useState("");
@@ -32,11 +31,13 @@ export default function FaceitBridgePanel() {
   const [connectionError,setConnectionError]=useState("");
   const [loadedVersion,setLoadedVersion]=useState<string|null>(null);
   const [pendingDownload,setPendingDownload]=useState<string|null>(null);
-  const [copied,setCopied]=useState(false);
-  const [showCode,setShowCode]=useState(false);
+  const [page,setPage]=useState(1);
+  const pageSize=25;
+  useEffect(()=>setPage(1),[filter,team,teamQuery]);
   useEffect(()=>{
     let cancelled=false;
     let handshake=false, latestSeen=false, refreshing=false, timedOut=false;
+    let libraryLoaded=false,libraryRevision='';
     const request_id=crypto.randomUUID();
     const check=()=>window.postMessage({type:"COUNTERSCOUT_BRIDGE_STATUS_REQUEST",request_id},window.location.origin);
     const receive=(event:MessageEvent)=>{
@@ -52,10 +53,15 @@ export default function FaceitBridgePanel() {
       if(document.hidden || refreshing) return;
       refreshing=true;
       try {
-        const [s,d]=await Promise.all([getFaceitBridgeSetup(),getFaceitBridgeLibrary()]);
+        const includeMatches=!libraryLoaded;
+        const [s,status]=await Promise.all([getFaceitBridgeSetup(),getFaceitBridgeLibrary(includeMatches)]);
+        const revision=status.commands.filter(c=>c.kind!=='download'&&c.state==='done').map(c=>c.id).join('|');
+        const reload=libraryLoaded && revision!==libraryRevision;
+        const d=reload?await getFaceitBridgeLibrary():status;
         if(!cancelled) {
           latestSeen=Boolean(s.last_seen && Date.now()/1000-Number(s.last_seen)<75);
-          setSetup(s);setData(d);setFolder(current=>current || s.downloads_dir);
+          setSetup(s);setData(previous=>({...d,matches:includeMatches||reload?d.matches:previous.matches}));
+          libraryLoaded=true;libraryRevision=revision;
           if(!handshake && latestSeen) setConnection("connected");
           if(!handshake && !latestSeen) setConnection(timedOut?"disconnected":"checking");
           if(!handshake && !latestSeen) check();
@@ -67,7 +73,8 @@ export default function FaceitBridgePanel() {
     const timeout=setTimeout(()=>{timedOut=true;if(!handshake && !latestSeen)setConnection("disconnected");},6000);
     const visible=()=>{if(!document.hidden){handshake=false;check();void refresh();}};
     document.addEventListener("visibilitychange",visible);
-    return()=>{cancelled=true;clearInterval(timer);clearTimeout(timeout);retries.forEach(clearTimeout);window.removeEventListener("message",receive);document.removeEventListener("visibilitychange",visible);};
+    window.addEventListener('counterscout:bridge-settings',visible);
+    return()=>{cancelled=true;clearInterval(timer);clearTimeout(timeout);retries.forEach(clearTimeout);window.removeEventListener("message",receive);document.removeEventListener("visibilitychange",visible);window.removeEventListener('counterscout:bridge-settings',visible);};
   },[]);
   const active=connection==="connected";
   const automationReady=Boolean(setup?.automation_ready && (!loadedVersion || loadedVersion===setup.extension_version));
@@ -77,6 +84,8 @@ export default function FaceitBridgePanel() {
   const query=teamQuery.trim().toLocaleLowerCase();
   const matches=data.matches.filter(m=>(filter==="all" || m.maps?.includes(filter) || m.map_name===filter) && (query?[m.team1.name,m.team2.name].some(name=>name.toLocaleLowerCase().includes(query)):(team==="all" || m.team1.id===team || m.team2.id===team)))
     .sort((a,b)=>matchTime(b.finished_at)-matchTime(a.finished_at));
+  const pageCount=Math.max(1,Math.ceil(matches.length/pageSize)),currentPage=Math.min(page,pageCount);
+  const visibleMatches=matches.slice((currentPage-1)*pageSize,currentPage*pageSize);
   const teamCommand=data.commands.find(command=>command.kind!=="download");
   const searching=teamCommand?.kind==="search" && ["queued","running"].includes(teamCommand.state);
   async function fetchTeam(value=url) {
@@ -98,6 +107,7 @@ export default function FaceitBridgePanel() {
         <p className="mt-1">Open <code>chrome://extensions</code>, choose ↻ Reload for <strong>CounterScout — FACEIT Bridge</strong>, then refresh Import and any FACEIT tabs. Your pairing code and downloads are preserved.</p>
       </div>}
       <p className="text-sm text-scout-muted">Find a team by name or URL, then download and import its matches with both team rosters. Browsing a match room never starts a download on its own.</p>
+      <p className="text-xs text-scout-muted">Set up pairing and your downloads folder in <strong>Settings → FACEIT extension</strong> (top-right).</p>
       <div className="flex flex-wrap gap-2"><input aria-label="FACEIT team name or URL" className="hud-input flex-1 min-w-[240px]" placeholder="Team name or https://www.faceit.com/en/teams/…" value={url} onChange={e=>setUrl(e.target.value)} onKeyDown={e=>{if(e.key==="Enter" && url.trim() && !busy && !searching)void fetchTeam();}}/>
         <button className="hud-btn-primary" disabled={!url.trim() || busy || searching} onClick={()=>void fetchTeam()}>{busy?"Queueing…":searching?"Finding teams…":"Fetch team matches"}</button></div>
       {error && <p role="alert" className="text-xs text-scout-red">{error}</p>}
@@ -109,18 +119,6 @@ export default function FaceitBridgePanel() {
           <button className="hud-btn text-xs shrink-0" disabled={busy} onClick={()=>{setUrl(result.url);void fetchTeam(result.url);}}>Use this team</button>
         </div>)}
       </div>}
-      <details className="border-t border-white/10 pt-3">
-        <summary className="text-sm cursor-pointer text-scout-accent">Extension setup & monitored folder</summary>
-        <ol className="list-decimal pl-5 text-xs text-scout-muted mt-3 space-y-2">
-          <li>In Chrome, open <code>chrome://extensions</code>, enable Developer mode, choose <strong>Load unpacked</strong>, and select <code className="break-all">{setup?.extension_path || "browser-extension"}</code>.</li>
-          <li>Open the extension popup, paste the pairing code below, enable automatic imports, and choose <strong>Save & connect</strong>.</li>
-          <li>After an extension update, choose <strong>Reload</strong> in Chrome’s extension manager, then refresh this app and any already-open FACEIT tabs. Sign in to FACEIT normally to download demos.</li>
-        </ol>
-        <div className="flex gap-2 items-center my-3"><input aria-label="Extension pairing code" className="hud-input flex-1 min-w-0 text-xs" type={showCode?"text":"password"} readOnly value={setup?.token || ""}/><button className="hud-btn text-xs" aria-pressed={showCode} onClick={()=>setShowCode(!showCode)}>{showCode?"Hide":"Show"}</button><button className="hud-btn text-xs" disabled={!setup} onClick={async()=>{try{await navigator.clipboard.writeText(setup!.token);setCopied(true);}catch{setError("Choose Show, then select and copy the pairing code manually.");}}}>{copied?"Copied":"Copy code"}</button></div>
-        <label className="text-xs text-scout-muted block mb-2" htmlFor="faceit-download-folder">Chrome’s download folder (only this folder can be read)</label>
-        <div className="flex gap-2"><input id="faceit-download-folder" className="hud-input flex-1 text-xs" value={folder} onChange={e=>setFolder(e.target.value)}/><button className="hud-btn text-xs" disabled={busy} onClick={async()=>{setBusy(true);try{await configureFaceitDownloads(folder);setError(null);}catch(e){setError(message(e));}finally{setBusy(false);}}}>Save folder</button></div>
-        <p className="text-xs text-scout-muted mt-3">No FACEIT API key or copied login token is needed. Imports wait for download completion, preserve the original file, and run Replay, roster and lineup ingestion. Compressed .dem.zst and .dem.gz files are supported.</p>
-      </details>
     </div>
     <section className="hud-panel p-4 space-y-3" aria-label="FACEIT match library">
       <div className="flex flex-wrap gap-3 items-center justify-between"><div><h3 className="text-sm text-white font-semibold">Match library <span className="text-scout-muted">({matches.length})</span></h3><p className="text-[11px] text-scout-muted mt-1">Download & import opens Chrome and downloads every available demo in the series.</p></div><div className="flex flex-wrap gap-2">
@@ -130,7 +128,7 @@ export default function FaceitBridgePanel() {
       </div></div>
       {!matches.length?<p className="text-sm text-scout-muted py-6">{data.matches.length?"No matches match these filters.":"Fetch a team above, or open its FACEIT Stats page and select Sync current page in the extension."}</p>:
         <div className="overflow-x-auto"><table className="w-full text-xs text-left"><thead className="text-scout-muted"><tr>{["Date","Match","Map","Score","Import",""].map((title,i)=><th key={i} className="px-2 py-2 font-normal">{title}</th>)}</tr></thead>
-          <tbody>{matches.map(m=>{const jobs=data.imports.filter(j=>j.match_id===m.match_id),command=data.commands.find(c=>c.kind==="download" && c.match_id===m.match_id),{waiting,demos,label,error:rowError,tone}=bridgeMatchState(jobs,command);return <tr key={m.match_id} className="border-t border-white/5 hover:bg-white/[.025]">
+          <tbody>{visibleMatches.map(m=>{const jobs=data.imports.filter(j=>j.match_id===m.match_id),command=data.commands.find(c=>c.kind==="download" && c.match_id===m.match_id),{waiting,demos,label,error:rowError,tone}=bridgeMatchState(jobs,command);return <tr key={m.match_id} className="border-t border-white/5 hover:bg-white/[.025]">
             <td className="p-2 whitespace-nowrap text-scout-muted">{date(m.finished_at)}</td><td className="p-2"><span className="text-white">{m.team1.name}</span><span className="text-scout-muted"> vs </span><span className="text-white">{m.team2.name}</span></td>
             <td className="p-2 text-scout-muted">{(m.maps?.length?m.maps:m.map_name?[m.map_name]:[]).map(map=>map.replace("de_","")).join(", ") || "—"}</td><td className="p-2 font-mono whitespace-nowrap">{m.team1.score!=null && m.team2.score!=null?`${m.team1.score} : ${m.team2.score}`:"—"}</td>
             <td className={`p-2 ${tone==="error"?"text-scout-red":tone==="warning"?"text-amber-300":tone==="success"?"text-scout-green":"text-scout-muted"}`} title={rowError || "Download from FACEIT with the paired extension enabled"}>
@@ -139,7 +137,11 @@ export default function FaceitBridgePanel() {
             </td>
             <td className="p-2"><div className="flex flex-wrap gap-3 items-center min-w-[240px]"><button className="hud-btn text-xs !px-3 !py-1.5" disabled={!active || !automationReady || waiting || pendingDownload===m.match_id} title={!automationReady?"Reload the Chrome extension to version 0.2.2, then refresh Import":!active?"Connect and enable the Chrome extension first":"Download all available demos; completed files are imported with both team names"} onClick={()=>void download(m.match_id)}>{waiting || pendingDownload===m.match_id?"In progress…":"Download & import"}</button><a className="text-scout-accent hover:underline whitespace-nowrap" href={m.faceit_url} target="_blank" rel="noreferrer">Match room ↗</a>{demos.map((demo,i)=><Link key={demo} title={demo} className="text-scout-accent hover:underline" to={`/replay/${encodeURIComponent(demo)}`}>Replay{demos.length>1?` ${i+1}`:""}</Link>)}</div></td>
           </tr>;})}</tbody></table></div>}
+      {!!matches.length && <nav aria-label="Match library pages" className="flex flex-wrap justify-between items-center gap-3 border-t border-scout-border pt-3 text-xs">
+        <span className="text-scout-muted">{(currentPage-1)*pageSize+1}–{Math.min(currentPage*pageSize,matches.length)} of {matches.length} matches</span>
+        <div className="flex items-center gap-3"><button className="hud-btn" disabled={currentPage===1} onClick={()=>setPage(currentPage-1)}>Previous page</button>
+          <span aria-live="polite">Page {currentPage} of {pageCount}</span><button className="hud-btn" disabled={currentPage===pageCount} onClick={()=>setPage(currentPage+1)}>Next page</button></div>
+      </nav>}
     </section>
-    {!!data.imports.length && <section className="hud-panel p-4 space-y-2"><h3 className="text-sm text-white font-semibold">Recent imports</h3>{data.imports.slice(0,6).map(job=><div key={job.id} className="text-xs flex flex-wrap gap-2 border-t border-white/5 pt-2"><span className={job.state==="error"?"text-scout-red":"text-scout-accent"}>{job.state}</span><span className="text-scout-muted">{job.error || job.demo_file || job.match_id}</span></div>)}</section>}
   </div>;
 }

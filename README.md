@@ -258,13 +258,13 @@ The bundled companion extension is in `browser-extension/`. It targets this app,
 not Leetify. Keep the backend on port **8000** and the app on **5173** (or **3000**)
 on the same computer as Chrome. Chrome 120+ is required.
 
-1. Start the app and open **Import → FACEIT → Extension setup & monitored folder**.
+1. Start the app and open **Settings → FACEIT extension**. Import opens on FACEIT by default; its match library shows 25 matches per page.
 2. Open `chrome://extensions` in Chrome, enable **Developer mode**, click
    **Load unpacked**, and select the project's `browser-extension` folder.
-3. Copy the pairing code from Import. Open **CounterScout — FACEIT Bridge** in
+3. Copy the pairing code from Settings. Open **CounterScout — FACEIT Bridge** in
    Chrome's extension menu, paste the code, enable **automatic imports**, and
    choose **Save & connect**. Treat this local pairing code like a password.
-4. Set the monitored folder in Import to Chrome's actual download location.
+4. Set the monitored folder in **Settings → FACEIT extension** to Chrome's actual download location.
    Refresh already-open app/FACEIT tabs once after installing the extension.
 5. Enter a **team name or FACEIT team profile URL** into Import and choose
    **Fetch team matches**. An unambiguous team already in the library is reused;

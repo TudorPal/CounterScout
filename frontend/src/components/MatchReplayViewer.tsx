@@ -104,7 +104,7 @@ export interface LiveReplayStatus {
   team1Score: number;
   team2Score: number;
   round: number;
-  team1CurrentSide: 2 | 3; // 2 = T, 3 = CT — flips at halftime
+  team1CurrentSide?: 2 | 3; // No single side for aggregate, all-round Insights.
   currentTimeStr: string;  // mm:ss into demo
   totalTimeStr: string;
   mapName: string;

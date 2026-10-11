@@ -3,9 +3,10 @@ import type { MatchIdentity } from "../utils/replayState";
 import type { MatchTimeline } from "../api/client";
 import { economyAt, money, roundAnchor, roundResult, sideColor, teamSide } from "../utils/replayState";
 
-export default function RoundOverview({timeline, identity, selected, onSelect, markers}: {
-  timeline: MatchTimeline; identity: MatchIdentity; selected: number; onSelect: (round: number) => void;
+export default function RoundOverview({timeline, identity, selected, onSelect, markers, onAll}: {
+  timeline: MatchTimeline; identity: MatchIdentity; selected: number|null; onSelect: (round: number) => void;
   markers?: Record<number, string[]>;
+  onAll?: () => void;
 }) {
   const facts = useMemo(() => timeline.rounds.map(r => ({round:r, ...roundResult(timeline, r),
     side:teamSide(timeline, identity, 2, roundAnchor(r)), economy:economyAt(timeline, roundAnchor(r))})), [timeline, identity]);
@@ -20,6 +21,7 @@ export default function RoundOverview({timeline, identity, selected, onSelect, m
   const strip = useRef<HTMLDivElement>(null);
   useEffect(() => { strip.current?.querySelector('[aria-pressed="true"]')?.scrollIntoView({block:"nearest",inline:"nearest"}); }, [selected]);
   return <nav aria-label="Round selection" className="hud-panel px-3 py-2 shrink-0 mx-2 mt-1" style={{containerType:"inline-size"}}>
+    {onAll && <div className="flex items-center gap-3 mb-1"><button className={`hud-tab ${selected===null?'hud-tab-active':'hud-tab-idle'}`} aria-pressed={selected===null} onClick={onAll}>All rounds</button><p className="text-[11px] text-scout-muted">{selected===null?'Select a round to focus the map':`Round ${selected} · select it again to show all rounds`}</p></div>}
     <div ref={strip} tabIndex={0} aria-label="Round results; scroll for overtime" className="flex overflow-x-auto pb-1" style={{scrollbarWidth:"thin"}}>
       {Array.from(groups).map(([phase,list],index) => <section key={phase} className={`shrink-0 ${index ? "border-l border-scout-border ml-3 pl-3" : ""}`}>
         <p className="text-[9px] uppercase tracking-wider text-scout-muted mb-1">{phase}</p>

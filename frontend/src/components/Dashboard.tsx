@@ -21,7 +21,6 @@ import {
 } from "../api/client";
 import LineupCard from "./LineupCard";
 import ScatterPlot from "./ScatterPlot";
-import SettingsPanel from "./SettingsPanel";
 import AppHeader from "./AppHeader";
 import AppBackdrop from "./AppBackdrop";
 import Select from "./Select";
@@ -86,7 +85,6 @@ export default function Dashboard() {
   const [showExecutes, setShowExecutes] = useState(false);
   const [ingestedMaps, setIngestedMaps] = useState<Set<string>>(new Set());
   const [downloadedMaps, setDownloadedMaps] = useState<DownloadedMap[]>([]);
-  const [showSettings, setShowSettings] = useState(false);
   const [analysing, setAnalysing] = useState(false);
   const [analysisMessage, setAnalysisMessage] = useState<string | null>(null);
 
@@ -476,9 +474,6 @@ export default function Dashboard() {
                 },
               ]}
             />
-            <button onClick={() => setShowSettings(true)} className="hud-btn">
-              Settings
-            </button>
             <button
               onClick={handleClearData}
               disabled={clearing}
@@ -874,8 +869,6 @@ export default function Dashboard() {
       </div>{/* /max-w-7xl inner */}
       </div>{/* /scrollable content */}
 
-      {/* ── Settings modal ── */}
-      <SettingsPanel open={showSettings} onClose={() => setShowSettings(false)} />
 
     </div>
   );

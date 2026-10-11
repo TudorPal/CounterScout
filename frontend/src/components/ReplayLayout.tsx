@@ -24,7 +24,7 @@ import LogoMark from "./LogoMark";
 import { matchIdentity, scoreAt, sideColor } from "../utils/replayState";
 import AppBackdrop from "./AppBackdrop";
 import AiRecapPanel from "./AiRecapPanel";
-import ImportActivityMenu from './ImportActivity';
+import AppTools from './AppTools';
 
 const TABS = [
   { to: "", label: "Replay", end: true },
@@ -135,7 +135,7 @@ export default function ReplayLayout() {
           </nav>
         </details>
         <button onClick={() => navigate("/replay")} className="hud-btn text-xs">← Library</button>
-        <ImportActivityMenu align="left" />
+        <AppTools/>
         <nav aria-label="Demo views" className="flex flex-col gap-1">
           {TABS.map(tab => <NavLink key={tab.label} to={tab.to ? `${basePath}/${tab.to}` : basePath} end
             className={({ isActive }) => `rounded-lg px-3 py-2.5 text-xs text-left transition ${isActive ? "bg-scout-accent/10 text-scout-accent border border-scout-accent/30" : "text-scout-muted hover:text-white hover:bg-white/5 border border-transparent"}`}>
@@ -158,7 +158,7 @@ export default function ReplayLayout() {
           <span className="font-mono text-xl text-white font-bold tabular-nums">{firstScore} : {secondScore}</span>
           {firstSide && <span className="text-[9px] text-scout-muted">{firstSide === 2 ? "CT" : "T"}</span>}
           <span className="min-w-0 flex-1 text-sm font-semibold truncate" style={{color:firstSide ? sideColor(firstSide === 2 ? 3 : 2) : "white"}}>{matchInfo?.team2?.name ?? identity.labels[identity.team1 === 2 ? 3 : 2]}</span>
-          <span className="hidden lg:inline text-[9px] text-scout-muted">{location.pathname === basePath ? "LIVE" : location.pathname.endsWith("/insights") ? "ROUND RESULT" : "FINAL"}</span>
+          <span className="hidden lg:inline text-[9px] text-scout-muted">{location.pathname === basePath ? "LIVE" : location.pathname.endsWith("/insights") ? liveStatus?.round===0?'MATCH TOTALS':'ROUND RESULT' : "FINAL"}</span>
         </header>
         <div className="flex-1 min-h-0 overflow-hidden">
         {/* Keep recap mounted across view changes so requests/results survive
